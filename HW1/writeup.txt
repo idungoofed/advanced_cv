@@ -1,0 +1,26 @@
+Note that all code is fully commented, with sources cited.
+
+Rotation
+--------
+Usage: HW01_Image_Rotation <path_to_image.jpg>
+Output: Displays the input image rotated 90 degrees counter-clockwise. Press any key to exit.
+
+This one is pretty straightforward. Open the image and rotate it 90 degrees around the center while maintaining the scaling. I display it in an 800x800 window. For input validation, I ensure that the filename is provided, ends with ".jpg", and that it can be read as an image. 
+
+Video Display
+-------------
+Usage: HW01_VideoDisplay
+Prereq: The videos to play are in a folder named "videos" in the same folder as the executable.
+Output: Each video in ./videos/ plays for 3 seconds then closes.
+
+This one was also fairly straightforward. It opens ./videos/ and attempts to treat every file in that directory as a video file and play it at its native fps for 3 seconds. If the directory doesn't exist or a file isn't able to be played as a video, it prints an appropriate error message and then exits.
+On my system (Ubuntu 16.04), all the videos played without any issues.
+
+Steganography
+-------------
+Usage: HW01_Steganography
+Prereq: The file "CAT_Kitten_img_13.jpg" needs to be in the same directory as the executable.
+Output: For each color channel (blue, green, red, in that order), it displays the image at each bitplane, lowest to highest. Press any key to go on to the next bitplane.
+
+Message: THE DOG HOWLS AT THE MOON
+The message was found on the green channel on the 3rd lowest bitplane.
