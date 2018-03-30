@@ -35,7 +35,10 @@ Point prevPoint = Point(-1, -1);
 
 // trackbar callback
 /*void onTrackbar(int trackbarPos, void* data) {
-    cout << "\"" << trackbarPos << "\"" << endl;
+    //cout << "\"" << trackbarPos << "\"" << endl;
+    if (*((int *)data) < 1) {
+        *((int *)data) = 1;
+    }
 }*/
 
 
@@ -88,7 +91,7 @@ int main(int argc, char* argv[]) {
         moveWindow(windowName, 10, 10);
 
         // trackbar setup
-        createTrackbar("Line Size", windowName, &lineWidth, lineWidthMax);//, onTrackbar);
+        createTrackbar("Line Size", windowName, &lineWidth, lineWidthMax); //, onTrackbar, &lineWidth);
 
         // mouse callback
         setMouseCallback(windowName, onMouse, &img);
