@@ -3,7 +3,10 @@
  */
 
 #include <opencv/cv.hpp>
+#include <opencv2/highgui.hpp>
+
 #include <iostream>
+
 
 using namespace cv;
 using namespace std;
@@ -15,10 +18,26 @@ using namespace std;
 
 // flag for if the mouse is pressed
 bool mouseDown = false;
+
 // circle line thickness (-1 = filled circle)
-int circleLine = -1;
+int circleLineThickness = -1;
+
+// max line width
+const int lineWidthMax = 100;
 // line width (2x circle radius)
 int lineWidth = 10;
+
+// line color
+Scalar lineColor = Scalar(0, 0, 255);
+
+// keeps track of previous point for line drawing
+Point prevPoint = Point(-1, -1);
+
+// trackbar callback
+/*void onTrackbar(int trackbarPos, void* data) {
+    cout << "\"" << trackbarPos << "\"" << endl;
+}*/
+
 
 // mouse callback
 void onMouse(int event, int x, int y, int flags, void* data) {
@@ -26,10 +45,14 @@ void onMouse(int event, int x, int y, int flags, void* data) {
         case EVENT_MOUSEMOVE:
             if (mouseDown) {
                 // cout << "mouse down: (" << x << ", " << y << ")" << endl;
-                circle(*((Mat *)data), Point(x, y), int(ceil(lineWidth/2.0)), Scalar(0, 0, 255), circleLine);
-            }
-            else {
-                cout << "mouse up: (" << x << ", " << y << ")" << endl;
+                Point curPoint = Point(x, y);
+                if (prevPoint.x != -1) {
+                    line(*((Mat *)data), prevPoint, curPoint, lineColor, lineWidth);
+                }
+                else {
+                    circle(*((Mat *)data), Point(x, y), int(ceil(lineWidth/2.0)), lineColor, circleLineThickness);
+                }
+                prevPoint = curPoint;
             }
             break;
         case EVENT_LBUTTONDOWN:
@@ -37,6 +60,7 @@ void onMouse(int event, int x, int y, int flags, void* data) {
             break;
         case EVENT_LBUTTONUP:
             mouseDown = false;
+            prevPoint = Point(-1, -1);
             break;
         default:
             cout << "Other event: " << event << endl;
@@ -62,7 +86,14 @@ int main(int argc, char* argv[]) {
         namedWindow(windowName, WINDOW_AUTOSIZE);
         resizeWindow(windowName, 800, 800);
         moveWindow(windowName, 10, 10);
+
+        // trackbar setup
+        createTrackbar("Line Size", windowName, &lineWidth, lineWidthMax);//, onTrackbar);
+
+        // mouse callback
         setMouseCallback(windowName, onMouse, &img);
+
+        // main loop
         while ((char)waitKey(1) != 'q') {
             imshow(windowName, img);
         }
