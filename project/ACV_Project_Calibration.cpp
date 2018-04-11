@@ -24,23 +24,44 @@
 using namespace cv;
 using namespace std;
 
+// params for blob detection
+const bool filterByColor = false;
 
-const int minCircleArea = 10;
+const bool filterByArea = true;
+const float minCircleArea = 10;
+
+const bool filterByCircularity = true;
+const float  minCircularity = 0.8;
+
+const bool filterByConvexity = true;
+const float minConvexity = .9;
+
+const bool filterByInertia = true;
+const float minInertiaRatio = .5;
 
 // edge circle colors
 const Scalar tl_color(0,0,255); // hsv(0, 255, 255)
+const Scalar tl_hsv(0,255,255);
+
 const Scalar tr_color(0,255,127); // hsv(45, 255, 255)
+const Scalar tr_hsv(45,255,255);
+
 const Scalar bl_color(255,255,0); // hsv(90, 255, 255)
+const Scalar bl_hsv(90,255,255);
+
 const Scalar br_color(255,0,127); // hsv(135, 255, 255)
+const Scalar br_hsv(135,255,255);
+
+
 
 /*
- * Gets average rgb value of the given mat (blob) and returns the hsv value
+ * Gets average rgb value of the given mat (extracted blob) and returns its hsv value
  */
 Scalar bgrToHSV(Mat bgr) {
     imshow("pt", bgr);
     waitKey(0);
     destroyWindow("pt");
-    Scalar avg = mean(bgr); //bgr
+    Scalar avg = mean(bgr);
     Mat bgr_one(1,1, CV_8UC3, avg);
     cout << "AVG: " << avg << endl;
     cout << "BGR: " << bgr_one << endl;
@@ -68,15 +89,15 @@ vector<KeyPoint> getCorners(Mat image) {
     cvtColor(image, grayscaleMat,CV_BGR2GRAY);
 
     SimpleBlobDetector::Params params;
-    params.filterByColor = false;
-    params.filterByArea = true;
+    params.filterByColor = filterByColor;
+    params.filterByArea = filterByArea;
     params.minArea = minCircleArea;
-    params.filterByCircularity = true;
-    params.minCircularity = .8;
-    params.filterByConvexity = true;
-    params.minConvexity = .9;
-    params.filterByInertia = true;
-    params.minInertiaRatio = .5;
+    params.filterByCircularity = filterByCircularity;
+    params.minCircularity = minCircularity;
+    params.filterByConvexity = filterByConvexity;
+    params.minConvexity = minConvexity;
+    params.filterByInertia = filterByInertia;
+    params.minInertiaRatio = minInertiaRatio;
 
 
     vector<KeyPoint> tl_list, tr_list, bl_list, br_list;
@@ -94,6 +115,9 @@ vector<KeyPoint> getCorners(Mat image) {
                            (int)round(item.size/2), (int)round(item.size/2));
         Mat forConversion = Mat(image, extractedBlob);
         Scalar hsv = bgrToHSV(forConversion);
+        if () {
+
+        }
         /*
          * if color is close to one of the presets:
          *    if in the same quadrant:
@@ -171,5 +195,6 @@ int main(int argc, char** argv) {
         }
     }
     */
+
     return EXIT_SUCCESS;
 }
