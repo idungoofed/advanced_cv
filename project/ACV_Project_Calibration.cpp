@@ -52,7 +52,9 @@ const Scalar bl_hsv(90,255,255);
 const Scalar br_color(255,0,127); // hsv(135, 255, 255)
 const Scalar br_hsv(135,255,255);
 
-
+// acceptable error
+const int hue_error = 10;
+const int saturation_error = 10;
 
 /*
  * Gets average rgb value of the given mat (extracted blob) and returns its hsv value
@@ -115,9 +117,9 @@ vector<KeyPoint> getCorners(Mat image) {
                            (int)round(item.size/2), (int)round(item.size/2));
         Mat forConversion = Mat(image, extractedBlob);
         Scalar hsv = bgrToHSV(forConversion);
-        if () {
+        /*if () {
 
-        }
+        }*/
         /*
          * if color is close to one of the presets:
          *    if in the same quadrant:
@@ -176,6 +178,9 @@ int main(int argc, char** argv) {
 
     // code for capturing a pic
     /*
+    destroyAllWindows();
+    namedWindow("x", CV_WINDOW_NORMAL);
+    imshow("x", testImage);
     VideoCapture cap(0);
     if (!cap.isOpened()) {
         cout << "Error opening webcam" << endl;
@@ -189,7 +194,7 @@ int main(int argc, char** argv) {
         Mat frame;
         cap >> frame;
         imshow(webcam_window, frame);
-        if (waitKey(30) >= 0) {
+        if ((char)waitKey(30) == 'q') {
             imwrite("./webcam_output.png", frame);
             break;
         }
