@@ -1,0 +1,6 @@
+- Projection finder(camera image): Extract projection from camera image
+- Camera calibrater(extracted projection): 4 corners -> transformation matrix
+- Transformer: uses transformation matrix, turns camera image into (transformed) rectangle
+- Laser-dot detector -> gives (x,y) of dot
+- Clicker: takes (x,y), performs click
+- 
