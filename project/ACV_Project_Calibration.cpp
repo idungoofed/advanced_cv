@@ -56,6 +56,10 @@ const Scalar br_hsv(135,255,255);
 const int hue_error = 10;
 const int saturation_error = 10;
 
+// constants for readability
+const int H_VAL = 0;
+const int S_VAL = 1;
+
 /*
  * Gets average rgb value of the given mat (extracted blob) and returns its hsv value
  */
@@ -72,6 +76,36 @@ Scalar bgrToHSV(Mat bgr) {
     Scalar hsv = hsv_one.at<Vec3b>(Point(0, 0));
     cout << "HSV: " << hsv << endl;
     return hsv;
+}
+
+int getQuadrant(Point pt, Size imgSize) {
+    Point mdpt(imgSize.width/2, imgSize.height/2);
+    bool pt_left = mdpt.x - pt.x > 0;
+    bool pt_up = mdpt.y - pt.y > 0;
+    return pt_left ? (pt_up ? 2 : 3) : (pt_up ? 1 : 4);
+}
+
+bool checkColor(Scalar candidate, Scalar original) {
+    double upper_bound = original[H_VAL] + hue_error;
+    double lower_bound = original[H_VAL] - hue_error;
+    if (lower_bound < 0) {
+        lower_bound+= 180;
+        if (lower_bound < candidate[H_VAL] || candidate[H_VAL] < upper_bound) {
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+    else {
+        if (lower_bound < candidate[H_VAL] < upper_bound) {
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+
 }
 
 //Returns corners in order: TL, TR, BR, BL
@@ -102,13 +136,10 @@ vector<KeyPoint> getCorners(Mat image) {
     params.minInertiaRatio = minInertiaRatio;
 
 
-    vector<KeyPoint> tl_list, tr_list, bl_list, br_list;
-
-
-
+    vector<KeyPoint> keypoints, tl_list, tr_list, bl_list, br_list;
     Ptr<SimpleBlobDetector> detector = SimpleBlobDetector::create(params);
-    vector<KeyPoint> keypoints;
     detector->detect(grayscaleMat, keypoints);
+
     for (const auto& item : keypoints) {
         cout << item.pt << ": " << item.size << endl;
 
@@ -117,19 +148,46 @@ vector<KeyPoint> getCorners(Mat image) {
                            (int)round(item.size/2), (int)round(item.size/2));
         Mat forConversion = Mat(image, extractedBlob);
         Scalar hsv = bgrToHSV(forConversion);
-        /*if () {
-
-        }*/
-        /*
-         * if color is close to one of the presets:
-         *    if in the same quadrant:
-         *       append to correct array
-         */
-
+        int quadrant = getQuadrant(item.pt, image.size());
+        cout << "Quadrant: " << quadrant << endl;
+        switch (quadrant) {
+            case 1:
+                if (checkColor(hsv, tr_hsv)) {
+                    cout << "Added " << item.pt << " to TR" << endl;
+                    tr_list.push_back(item);
+                }
+                break;
+            case 2:
+                if (checkColor(hsv, tl_hsv)) {
+                    cout << "Added " << item.pt << " to TL" << endl;
+                    tl_list.push_back(item);
+                }
+                break;
+            case 3:
+                if (checkColor(hsv, bl_hsv)) {
+                    cout << "Added " << item.pt << " to BL" << endl;
+                    bl_list.push_back(item);
+                }
+                break;
+            case 4:
+                if (checkColor(hsv, br_hsv)) {
+                    cout << "Added " << item.pt << " to BR" << endl;
+                    br_list.push_back(item);
+                }
+                break;
+            default:
+                cout << "Error: Quadrant error" << endl;
+                break;
+        }
         cout << endl;
     }
-
-    return keypoints;
+    // ToDo: find corner-est of each list, remove all others
+    if (not (tl_list.empty() || tr_list.empty() || br_list.empty() || bl_list.empty()) ) {
+        return vector<KeyPoint>{tl_list[0], tr_list[0], br_list[0], bl_list[0]};
+    }
+    else {
+        return vector<KeyPoint>{};
+    }
 }
 
 
