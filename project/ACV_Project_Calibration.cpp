@@ -24,21 +24,6 @@
 using namespace cv;
 using namespace std;
 
-// params for blob detection
-const bool filterByColor = false;
-
-const bool filterByArea = true;
-const float minCircleArea = 10;
-
-const bool filterByCircularity = true;
-const float  minCircularity = 0.8;
-
-const bool filterByConvexity = true;
-const float minConvexity = .9;
-
-const bool filterByInertia = true;
-const float minInertiaRatio = .5;
-
 // edge circle colors
 const Scalar tl_color(0,0,255); // hsv(0, 255, 255)
 const Scalar tl_hsv(0,255,255);
@@ -53,7 +38,7 @@ const Scalar br_color(255,0,127); // hsv(135, 255, 255)
 const Scalar br_hsv(135,255,255);
 
 // acceptable error
-const int hue_error = 10;
+const int hue_error = 15;
 const int saturation_error = 10;
 
 // constants for readability
@@ -64,9 +49,9 @@ const int S_VAL = 1;
  * Gets average rgb value of the given mat (extracted blob) and returns its hsv value
  */
 Scalar bgrToHSV(Mat bgr) {
-    imshow("pt", bgr);
-    waitKey(0);
-    destroyWindow("pt");
+    //imshow("pt", bgr);
+    //waitKey(0);
+    //destroyWindow("pt");
     Scalar avg = mean(bgr);
     Mat bgr_one(1,1, CV_8UC3, avg);
     cout << "AVG: " << avg << endl;
@@ -86,6 +71,7 @@ int getQuadrant(Point pt, Size imgSize) {
 }
 
 bool checkColor(Scalar candidate, Scalar original) {
+    //return true;
     double upper_bound = original[H_VAL] + hue_error;
     double lower_bound = original[H_VAL] - hue_error;
     if (lower_bound < 0) {
@@ -105,7 +91,6 @@ bool checkColor(Scalar candidate, Scalar original) {
             return false;
         }
     }
-
 }
 
 //Returns corners in order: TL, TR, BR, BL
@@ -124,16 +109,13 @@ vector<KeyPoint> getCorners(Mat image) {
     Mat grayscaleMat;
     cvtColor(image, grayscaleMat,CV_BGR2GRAY);
 
-    SimpleBlobDetector::Params params;
-    params.filterByColor = filterByColor;
-    params.filterByArea = filterByArea;
-    params.minArea = minCircleArea;
-    params.filterByCircularity = filterByCircularity;
-    params.minCircularity = minCircularity;
-    params.filterByConvexity = filterByConvexity;
-    params.minConvexity = minConvexity;
-    params.filterByInertia = filterByInertia;
-    params.minInertiaRatio = minInertiaRatio;
+    /* flow:
+     *
+     *
+     *
+     *
+     */
+
 
 
     vector<KeyPoint> keypoints, tl_list, tr_list, bl_list, br_list;
@@ -182,6 +164,8 @@ vector<KeyPoint> getCorners(Mat image) {
         cout << endl;
     }
     // ToDo: find corner-est of each list, remove all others
+
+
     if (not (tl_list.empty() || tr_list.empty() || br_list.empty() || bl_list.empty()) ) {
         return vector<KeyPoint>{tl_list[0], tr_list[0], br_list[0], bl_list[0]};
     }
@@ -193,6 +177,7 @@ vector<KeyPoint> getCorners(Mat image) {
 
 int main(int argc, char** argv) {
 
+    /*
     Mat testImage(Size(400, 400), CV_8UC3, Scalar(255, 255, 255));
 
     int edgeMargin = 25;
@@ -200,7 +185,7 @@ int main(int argc, char** argv) {
 
     Scalar crossColor = Scalar(0, 0, 255);
 
-    //Create corners (centers of crosses)
+    //Create corners (centers of circles)
     Point topLeft(edgeMargin, edgeMargin);
     Point topRight(testImage.rows - edgeMargin, edgeMargin);
     Point bottomRight(testImage.rows - edgeMargin, testImage.cols - edgeMargin);
@@ -221,12 +206,16 @@ int main(int argc, char** argv) {
     circle(testImage, topRight, radius, tr_color, -1);
     circle(testImage, bottomLeft, radius, bl_color, -1);
     circle(testImage, bottomRight, radius, br_color, -1);
+    */
+
+    Mat testImage = imread("./test_pics/webcam_output.png");
 
     // display the original image
     imshow("Original Image", testImage);
 
     // find the blobs
     vector<KeyPoint> keypoints = getCorners(testImage);
+    cout << "Found " << keypoints.size() << " keypoints" << endl;
     for (const auto& kp : keypoints) {
         circle(testImage, kp.pt, int(kp.size)/4, Scalar(255, 255, 255), -1);
     }
