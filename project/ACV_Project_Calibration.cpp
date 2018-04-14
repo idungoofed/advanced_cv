@@ -1,7 +1,3 @@
-//
-// Created by Ben Brown on 4/5/18.
-//
-
 /**
  * Ben Brown : beb5277
  * Mark Philip : msp3430
@@ -15,7 +11,6 @@
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
-#include <opencv2/features2d.hpp>
 #include <opencv/cv.hpp>
 
 
@@ -24,38 +19,30 @@
 using namespace cv;
 using namespace std;
 
-// edge circle colors
-const Scalar tl_color(0,0,255); // hsv(0, 255, 255)
-const Scalar tl_hsv(0,255,255);
-
-const Scalar tr_color(0,255,127); // hsv(45, 255, 255)
-const Scalar tr_hsv(45,255,255);
-
-const Scalar bl_color(255,255,0); // hsv(90, 255, 255)
-const Scalar bl_hsv(90,255,255);
-
-const Scalar br_color(255,0,127); // hsv(135, 255, 255)
-const Scalar br_hsv(135,255,255);
-
-// acceptable error
-const int hue_error = 15;
-const int saturation_error = 10;
+// drawing constants
+const int calibration_circle_radius = 20;
+int pic_diff = 3;
 
 // constants for readability
 const int H_VAL = 0;
 const int S_VAL = 1;
 
+// window names
+const char *calibration_window_name = "Calibration Window";
+const char *webcam_window = "Webcam";
+const char *difference_window = "Calibration";
+
 /*
  * Gets average rgb value of the given mat (extracted blob) and returns its hsv value
  */
-Scalar bgrToHSV(Mat bgr) {
+Scalar BGRtoHSV(Mat bgr) {
     //imshow("pt", bgr);
     //waitKey(0);
     //destroyWindow("pt");
     Scalar avg = mean(bgr);
     Mat bgr_one(1,1, CV_8UC3, avg);
-    cout << "AVG: " << avg << endl;
-    cout << "BGR: " << bgr_one << endl;
+    //cout << "AVG: " << avg << endl;
+    //cout << "BGR: " << bgr_one << endl;
     Mat hsv_one;
     cvtColor(bgr_one, hsv_one, CV_BGR2HSV);
     Scalar hsv = hsv_one.at<Vec3b>(Point(0, 0));
@@ -63,125 +50,46 @@ Scalar bgrToHSV(Mat bgr) {
     return hsv;
 }
 
-int getQuadrant(Point pt, Size imgSize) {
-    Point mdpt(imgSize.width/2, imgSize.height/2);
-    bool pt_left = mdpt.x - pt.x > 0;
-    bool pt_up = mdpt.y - pt.y > 0;
-    return pt_left ? (pt_up ? 2 : 3) : (pt_up ? 1 : 4);
+Scalar HSVtoBGR(Scalar hsv) {
+    Mat hsv_one(1, 1, CV_8UC3, hsv);
+    Mat bgr_one;
+    cvtColor(hsv_one, bgr_one, CV_HSV2BGR);
+    Scalar bgr = bgr_one.at<Vec3b>(Point(0, 0));
+    return bgr;
 }
 
-bool checkColor(Scalar candidate, Scalar original) {
-    //return true;
-    double upper_bound = original[H_VAL] + hue_error;
-    double lower_bound = original[H_VAL] - hue_error;
-    if (lower_bound < 0) {
-        lower_bound+= 180;
-        if (lower_bound < candidate[H_VAL] || candidate[H_VAL] < upper_bound) {
-            return true;
-        }
-        else {
-            return false;
-        }
+void drawCircles(vector<Point2f> circles, int hue_val, Mat image) {
+    for (const auto& circ : circles) {
+        circle(image, circ, calibration_circle_radius, HSVtoBGR(Scalar(hue_val, 255, 255)), -1);
     }
-    else {
-        if (lower_bound < candidate[H_VAL] < upper_bound) {
-            return true;
-        }
-        else {
-            return false;
-        }
+}
+
+vector<KeyPoint> getDifferences(const Mat prevFrame, const Mat currFrame) {
+    Mat diff = Mat(currFrame.rows, currFrame.cols, currFrame.type());
+    absdiff(currFrame, prevFrame, diff);
+    cvtColor(diff, diff, CV_BGR2GRAY);
+    diff = diff > 5;//pic_diff;
+    /*
+    if (countNonZero(diff) > (diff.rows * diff.cols)/8) {
+        pic_diff++;
+        cout << "Difference threshold: " << pic_diff << endl;
     }
+     */
+    //else if (pic_diff > 1){
+    //    pic_diff--;
+    //}
+
+    imshow(difference_window, diff);
+
+    return vector<KeyPoint>{};
 }
 
 //Returns corners in order: TL, TR, BR, BL
-vector<KeyPoint> getCorners(Mat image) {
-    /* FLOW
-     * init: four arrays: one for each corner
-     * detect blobs
-     * for each blob:
-     *    convert to hsv
-     *    if color is close to one of the presets:
-     *       if in the same quadrant:
-     *          append to correct array
-     * find most extreme blob in each array -> corner_points
-    */
-
-    Mat grayscaleMat;
-    cvtColor(image, grayscaleMat,CV_BGR2GRAY);
-
-    /* flow:
-     *
-     *
-     *
-     *
-     */
-
-
-
-    vector<KeyPoint> keypoints, tl_list, tr_list, bl_list, br_list;
-    Ptr<SimpleBlobDetector> detector = SimpleBlobDetector::create(params);
-    detector->detect(grayscaleMat, keypoints);
-
-    for (const auto& item : keypoints) {
-        cout << item.pt << ": " << item.size << endl;
-
-        Rect extractedBlob((int)round(item.pt.x - item.size/4),
-                           (int)round(item.pt.y - item.size/4),
-                           (int)round(item.size/2), (int)round(item.size/2));
-        Mat forConversion = Mat(image, extractedBlob);
-        Scalar hsv = bgrToHSV(forConversion);
-        int quadrant = getQuadrant(item.pt, image.size());
-        cout << "Quadrant: " << quadrant << endl;
-        switch (quadrant) {
-            case 1:
-                if (checkColor(hsv, tr_hsv)) {
-                    cout << "Added " << item.pt << " to TR" << endl;
-                    tr_list.push_back(item);
-                }
-                break;
-            case 2:
-                if (checkColor(hsv, tl_hsv)) {
-                    cout << "Added " << item.pt << " to TL" << endl;
-                    tl_list.push_back(item);
-                }
-                break;
-            case 3:
-                if (checkColor(hsv, bl_hsv)) {
-                    cout << "Added " << item.pt << " to BL" << endl;
-                    bl_list.push_back(item);
-                }
-                break;
-            case 4:
-                if (checkColor(hsv, br_hsv)) {
-                    cout << "Added " << item.pt << " to BR" << endl;
-                    br_list.push_back(item);
-                }
-                break;
-            default:
-                cout << "Error: Quadrant error" << endl;
-                break;
-        }
-        cout << endl;
-    }
-    // ToDo: find corner-est of each list, remove all others
-
-
-    if (not (tl_list.empty() || tr_list.empty() || br_list.empty() || bl_list.empty()) ) {
-        return vector<KeyPoint>{tl_list[0], tr_list[0], br_list[0], bl_list[0]};
-    }
-    else {
-        return vector<KeyPoint>{};
-    }
-}
-
-
-int main(int argc, char** argv) {
-
-    /*
+vector<KeyPoint> getCorners() {
+    // create the calibration image and display it
     Mat testImage(Size(400, 400), CV_8UC3, Scalar(255, 255, 255));
 
     int edgeMargin = 25;
-    int radius = 20;
 
     Scalar crossColor = Scalar(0, 0, 255);
 
@@ -191,62 +99,62 @@ int main(int argc, char** argv) {
     Point bottomRight(testImage.rows - edgeMargin, testImage.cols - edgeMargin);
     Point bottomLeft(edgeMargin, testImage.cols - edgeMargin);
 
-
-
     vector<Point2f> points; //Clockwise: TL, TR, BR, BL
-
+    points.push_back(topLeft);
+    points.push_back(topRight);
+    points.push_back(bottomRight);
+    points.push_back(bottomLeft);
     cout << "Points:" << endl;
-    cout << "\tTL: " << topLeft << ", " << tl_color << endl;
-    cout << "\tTR: " << topRight << ", " << tr_color << endl;
-    cout << "\tBL: " << bottomLeft << ", " << bl_color << endl;
-    cout << "\tBR: " << bottomRight << ", " << br_color << endl << endl;
+    cout << "\tTL: " << topLeft << ", " << endl;
+    cout << "\tTR: " << topRight << ", " << endl;
+    cout << "\tBL: " << bottomLeft << ", " << endl;
+    cout << "\tBR: " << bottomRight << ", " << endl;
 
-    // draw colored circles on the points
-    circle(testImage, topLeft, radius, tl_color, -1);
-    circle(testImage, topRight, radius, tr_color, -1);
-    circle(testImage, bottomLeft, radius, bl_color, -1);
-    circle(testImage, bottomRight, radius, br_color, -1);
-    */
+    // display the calibration image
+    namedWindow(calibration_window_name, CV_WINDOW_NORMAL);
+    imshow(calibration_window_name, testImage);
 
-    Mat testImage = imread("./test_pics/webcam_output.png");
+    // setup display for difference display
+    namedWindow(difference_window, CV_WINDOW_NORMAL);
 
-    // display the original image
-    imshow("Original Image", testImage);
-
-    // find the blobs
-    vector<KeyPoint> keypoints = getCorners(testImage);
-    cout << "Found " << keypoints.size() << " keypoints" << endl;
-    for (const auto& kp : keypoints) {
-        circle(testImage, kp.pt, int(kp.size)/4, Scalar(255, 255, 255), -1);
-    }
-    // display
-    imshow("Found Circles", testImage);
-    waitKey(0);
-
-    // code for capturing a pic
-    /*
-    destroyAllWindows();
-    namedWindow("x", CV_WINDOW_NORMAL);
-    imshow("x", testImage);
+    // create the webcam capture and prep for displaying it
     VideoCapture cap(0);
     if (!cap.isOpened()) {
         cout << "Error opening webcam" << endl;
-        return EXIT_FAILURE;
+        return vector<KeyPoint>{};
     }
-    Mat webcam;
-    const char *webcam_window = "Webcam";
     namedWindow(webcam_window, CV_WINDOW_NORMAL);
     setWindowProperty(webcam_window, CV_WND_PROP_FULLSCREEN, CV_WINDOW_FULLSCREEN);
-    for (;;) {
-        Mat frame;
-        cap >> frame;
-        imshow(webcam_window, frame);
-        if ((char)waitKey(30) == 'q') {
-            imwrite("./webcam_output.png", frame);
-            break;
-        }
-    }
-    */
 
+    // grab the first two images
+    Mat prevFrame;
+    Mat currFrame;
+    drawCircles(points, 0, testImage);
+    cap >> prevFrame;
+    //prevFrame = testImage.clone();
+    drawCircles(points, 3, testImage);
+    cap >> currFrame;
+    //currFrame = testImage.clone();
+
+    vector<KeyPoint> num_points = getDifferences(prevFrame, currFrame); // displays overall binary difference on differences_window
+    while (num_points.size() != 4) {
+        for (int i = 9; i < 180; i += 3) {
+            drawCircles(points, i, testImage);
+            prevFrame = currFrame.clone();
+            cap >> currFrame;
+            //currFrame = testImage.clone();
+            imshow(calibration_window_name, testImage);
+            imshow(webcam_window, currFrame);
+            waitKey(30);
+        }
+        num_points = getDifferences(prevFrame, currFrame); // displays overall binary difference on differences_window
+    }
+    return num_points;
+
+}
+
+
+int main(int argc, char** argv) {
+    getCorners();
     return EXIT_SUCCESS;
 }
