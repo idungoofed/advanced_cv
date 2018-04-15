@@ -112,6 +112,7 @@ vector<KeyPoint> getCorners() {
 
     // display the calibration image
     namedWindow(calibration_window_name, CV_WINDOW_NORMAL);
+    // this window needs to be put on the projection screen
     imshow(calibration_window_name, testImage);
 
     // setup display for difference display
