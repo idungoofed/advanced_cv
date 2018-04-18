@@ -32,8 +32,11 @@ const char *calibration_window = "Calibration Window";
 const char *webcam_window = "Webcam Image";
 const char *difference_window = "Calibration";
 
-/*
+/**
  * Gets average rgb value of the given mat (extracted blob) and returns its hsv value
+ *
+ * @param bgr    Image in BGR colorspace
+ * @return       Returns HSV scalar that represents the average color of @param bgr
  */
 Scalar BGRtoHSV(Mat bgr) {
     //imshow("pt", bgr);
@@ -50,6 +53,12 @@ Scalar BGRtoHSV(Mat bgr) {
     return hsv;
 }
 
+/**
+ * Converts HSV scalar to BGR scalar
+ *
+ * @param hsv    HSV scalar to convert to BGR
+ * @return       BGR scalar of @param hsv
+ */
 Scalar HSVtoBGR(Scalar hsv) {
     Mat hsv_one(1, 1, CV_8UC3, hsv);
     Mat bgr_one;
@@ -58,6 +67,11 @@ Scalar HSVtoBGR(Scalar hsv) {
     return bgr;
 }
 
+/**
+ * Draws red/blue circles at the specified points
+ *
+ * @param blue:    boolean that if true, the function draws blue circles. If false, draws red circles.
+ */
 void drawCircles(vector<Point2f> circles, bool blue, Mat image) {
     for (const auto& circ : circles) {
         blue ? circle(image, circ, calibration_circle_radius, Scalar(255, 0, 0), -1) :
@@ -65,22 +79,33 @@ void drawCircles(vector<Point2f> circles, bool blue, Mat image) {
     }
 }
 
+/**
+ * Given a vector of input frames, finds the areas where there is consistent change in the blue/red channels.
+ *
+ * @param frames     Vector of frames to process
+ * @return           Returns a vector of keypoints in the order TL, TR, BR, BL
+ */
 vector<KeyPoint> getDifferences(vector<Mat> frames) {
+    // used to keep track of areas of interest
     Mat storedCircles(frames[0].rows, frames[0].cols, CV_8UC1, 255);
     Mat diffMat(frames[0].rows, frames[0].cols, DataType<int>::type);
+    // iterate over given frames
     for (size_t idx = 0; idx < frames.size() - 1; idx++) {
         Mat diff;
         absdiff(frames[idx], frames[idx+1], diff);
         vector<Mat> channels;
+        // extract channels from diff image
         split(diff, channels);
 
         // combine blue and red channels
         Mat comp = channels[0] + channels[2];
+        // keep pixels above a certain diff threshold
         comp = comp > pic_diff;
         //imshow(difference_window, comp);
+        // keep track of only the areas that consistently show red/blue change
         bitwise_and(storedCircles, comp, storedCircles);
-        imshow(difference_window, storedCircles);
     }
+    imshow(difference_window, storedCircles);
 
     /*
     // Used originally for finding a good pic_diff value
@@ -143,6 +168,7 @@ vector<KeyPoint> getCorners() {
     namedWindow(webcam_window, CV_WINDOW_NORMAL);
     setWindowProperty(webcam_window, CV_WND_PROP_FULLSCREEN, CV_WINDOW_FULLSCREEN);
 
+    // show calibration window and webcam image until user says everything is positioned
     cout << "Press q to start calibration..." << endl;
     bool blue = false;
     Mat currFrame;
@@ -159,6 +185,7 @@ vector<KeyPoint> getCorners() {
     namedWindow(difference_window, CV_WINDOW_NORMAL);
     vector<KeyPoint> num_points;
     vector<Mat> frames;
+    // grab num_cap_frames at a time and send to getDifferences for processing, alternating between red and blue
     while (num_points.empty() || num_points.size() != 4) {
         for(int i = 0; i < num_cap_frames; i++) {
             blue = !blue;
