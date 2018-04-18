@@ -2,10 +2,9 @@
  * Ben Brown : beb5277
  * Mark Philip : msp3430
  * Advanced Computer Vision Project
- * Reads in a warped image with crosses and performs a Hough transform to locate
- * the corners of the image
  *
- * Ellipse detection: https://www.sciencedirect.com/science/article/pii/S0031320314001976
+ * TODO: add accurate description
+ *
  */
 
 #include <opencv2/core/core.hpp>
@@ -13,23 +12,24 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv/cv.hpp>
 
-
 #include <iostream>
+
+// #include <opencv2/opencv.hpp>
+
 
 using namespace cv;
 using namespace std;
 
 // drawing constants
 const int calibration_circle_radius = 20;
-int pic_diff = 3;
 
-// constants for readability
-const int H_VAL = 0;
-const int S_VAL = 1;
+// filter params
+int pic_diff = 6;
+int num_cap_frames = 6;
 
 // window names
-const char *calibration_window_name = "Calibration Window";
-const char *webcam_window = "Webcam";
+const char *calibration_window = "Calibration Window";
+const char *webcam_window = "Webcam Image";
 const char *difference_window = "Calibration";
 
 /*
@@ -58,29 +58,49 @@ Scalar HSVtoBGR(Scalar hsv) {
     return bgr;
 }
 
-void drawCircles(vector<Point2f> circles, int hue_val, Mat image) {
+void drawCircles(vector<Point2f> circles, bool blue, Mat image) {
     for (const auto& circ : circles) {
-        circle(image, circ, calibration_circle_radius, HSVtoBGR(Scalar(hue_val, 255, 255)), -1);
+        blue ? circle(image, circ, calibration_circle_radius, Scalar(255, 0, 0), -1) :
+        circle(image, circ, calibration_circle_radius, Scalar(0, 0, 255), -1);
     }
 }
 
-vector<KeyPoint> getDifferences(const Mat prevFrame, const Mat currFrame) {
-    Mat diff = Mat(currFrame.rows, currFrame.cols, currFrame.type());
-    absdiff(currFrame, prevFrame, diff);
-    cvtColor(diff, diff, CV_BGR2GRAY);
-    diff = diff > 5;//pic_diff;
+vector<KeyPoint> getDifferences(vector<Mat> frames) {
+    Mat storedCircles(frames[0].rows, frames[0].cols, CV_8UC1, 255);
+    Mat diffMat(frames[0].rows, frames[0].cols, DataType<int>::type);
+    for (size_t idx = 0; idx < frames.size() - 1; idx++) {
+        Mat diff;
+        absdiff(frames[idx], frames[idx+1], diff);
+        vector<Mat> channels;
+        split(diff, channels);
+
+        // combine blue and red channels
+        Mat comp = channels[0] + channels[2];
+        comp = comp > 150;
+        //imshow(difference_window, comp);
+        bitwise_and(storedCircles, comp, storedCircles);
+        imshow(difference_window, storedCircles);
+    }
+
     /*
+    // Used originally for finding a good pic_diff value
     if (countNonZero(diff) > (diff.rows * diff.cols)/8) {
         pic_diff++;
         cout << "Difference threshold: " << pic_diff << endl;
     }
+    else if (pic_diff > 1){
+        pic_diff--;
+    }
      */
-    //else if (pic_diff > 1){
-    //    pic_diff--;
-    //}
 
-    imshow(difference_window, diff);
-
+    /* FLOW
+     * ----
+     * Dilate (x2?)
+     * Find blobs (connected compononets w/ stats?) filter by a max size
+     *    - should be 4 of them, otherwise get 4 largest
+     *    - ensure that there is 1 per quadrant
+     *       - if not, rerun with a new frame cap count?
+     */
     return vector<KeyPoint>{};
 }
 
@@ -110,13 +130,8 @@ vector<KeyPoint> getCorners() {
     cout << "\tBL: " << bottomLeft << ", " << endl;
     cout << "\tBR: " << bottomRight << ", " << endl;
 
-    // display the calibration image
-    namedWindow(calibration_window_name, CV_WINDOW_NORMAL);
     // this window needs to be put on the projection screen
-    imshow(calibration_window_name, testImage);
-
-    // setup display for difference display
-    namedWindow(difference_window, CV_WINDOW_NORMAL);
+    imshow(calibration_window, testImage);
 
     // create the webcam capture and prep for displaying it
     VideoCapture cap(0);
@@ -127,31 +142,38 @@ vector<KeyPoint> getCorners() {
     namedWindow(webcam_window, CV_WINDOW_NORMAL);
     setWindowProperty(webcam_window, CV_WND_PROP_FULLSCREEN, CV_WINDOW_FULLSCREEN);
 
-    // grab the first two images
-    Mat prevFrame;
+    cout << "Press q to start calibration..." << endl;
+    bool blue = false;
     Mat currFrame;
-    drawCircles(points, 0, testImage);
-    cap >> prevFrame;
-    //prevFrame = testImage.clone();
-    drawCircles(points, 3, testImage);
-    cap >> currFrame;
-    //currFrame = testImage.clone();
-
-    vector<KeyPoint> num_points = getDifferences(prevFrame, currFrame); // displays overall binary difference on differences_window
-    while (num_points.size() != 4) {
-        for (int i = 9; i < 180; i += 3) {
-            drawCircles(points, i, testImage);
-            prevFrame = currFrame.clone();
-            cap >> currFrame;
-            //currFrame = testImage.clone();
-            imshow(calibration_window_name, testImage);
-            imshow(webcam_window, currFrame);
-            waitKey(30);
-        }
-        num_points = getDifferences(prevFrame, currFrame); // displays overall binary difference on differences_window
+    while ((char)waitKey(40) != 'q') {
+        blue = !blue;
+        drawCircles(points, blue, testImage);
+        cap >> currFrame;
+        imshow(calibration_window, testImage);
+        imshow(webcam_window, currFrame);
     }
-    return num_points;
 
+    cout << "Starting calibration..." << endl;
+    // setup display for difference display
+    namedWindow(difference_window, CV_WINDOW_NORMAL);
+    vector<KeyPoint> num_points;
+    vector<Mat> frames;
+    while (num_points.empty() || num_points.size() != 4) {
+        for(int i = 0; i < num_cap_frames; i++) {
+            blue = !blue;
+            drawCircles(points, blue, testImage);
+            cap >> currFrame;
+            // frames.push_back(testImage.clone());
+            frames.push_back(currFrame.clone());
+            imshow(calibration_window, testImage);
+            imshow(webcam_window, currFrame);
+            waitKey(40);
+        }
+        num_points = getDifferences(frames); // displays overall binary difference on differences_window
+    }
+    cout << "Calibration complete." << endl;
+    cap.release();
+    return num_points;
 }
 
 
@@ -159,3 +181,57 @@ int main(int argc, char** argv) {
     getCorners();
     return EXIT_SUCCESS;
 }
+
+/*
+//get fps (https://www.learnopencv.com/how-to-find-frame-rate-or-frames-per-second-fps-in-opencv-python-cpp/)
+int main(int argc, char** argv)
+{
+
+    // Start default camera
+    VideoCapture video(0);
+
+    // With webcam get(CV_CAP_PROP_FPS) does not work.
+    // Let's see for ourselves.
+
+    double fps = video.get(CV_CAP_PROP_FPS);
+    // If you do not care about backward compatibility
+    // You can use the following instead for OpenCV 3
+    // double fps = video.get(CAP_PROP_FPS);
+    cout << "Frames per second using video.get(CV_CAP_PROP_FPS) : " << fps << endl;
+
+
+    // Number of frames to capture
+    int num_frames = 120;
+
+    // Start and end times
+    time_t start, end;
+
+    // Variable for storing video frames
+    Mat frame;
+
+    cout << "Capturing " << num_frames << " frames" << endl ;
+
+    // Start time
+    time(&start);
+
+    // Grab a few frames
+    for(int i = 0; i < num_frames; i++)
+    {
+        video >> frame;
+    }
+
+    // End Time
+    time(&end);
+
+    // Time elapsed
+    double seconds = difftime (end, start);
+    cout << "Time taken : " << seconds << " seconds" << endl;
+
+    // Calculate frames per second
+    fps  = num_frames / seconds;
+    cout << "Estimated frames per second : " << fps << endl;
+
+    // Release video
+    video.release();
+    return 0;
+}*/
