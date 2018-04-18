@@ -24,7 +24,7 @@ using namespace std;
 const int calibration_circle_radius = 20;
 
 // filter params
-int pic_diff = 6;
+int pic_diff = 2;
 int num_cap_frames = 6;
 
 // window names
@@ -76,7 +76,7 @@ vector<KeyPoint> getDifferences(vector<Mat> frames) {
 
         // combine blue and red channels
         Mat comp = channels[0] + channels[2];
-        comp = comp > 150;
+        comp = comp > pic_diff;
         //imshow(difference_window, comp);
         bitwise_and(storedCircles, comp, storedCircles);
         imshow(difference_window, storedCircles);
@@ -131,6 +131,7 @@ vector<KeyPoint> getCorners() {
     cout << "\tBR: " << bottomRight << ", " << endl;
 
     // this window needs to be put on the projection screen
+    namedWindow(calibration_window, CV_WINDOW_NORMAL);
     imshow(calibration_window, testImage);
 
     // create the webcam capture and prep for displaying it
