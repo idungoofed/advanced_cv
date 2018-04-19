@@ -263,7 +263,7 @@ vector<Point> getCorners() {
     vector<Point> found_points;
     vector<Mat> frames;
     // grab num_cap_frames at a time and send to getDifferences for processing, alternating between red and blue
-    while (found_points.empty() || found_points.size() != 5) {
+    while (found_points.empty() || found_points.size() != 4) {
         for(int i = 0; i < num_cap_frames; i++) {
             blue = !blue;
             drawCircles(points, blue, testImage);
