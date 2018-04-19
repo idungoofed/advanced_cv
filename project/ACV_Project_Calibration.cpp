@@ -3,7 +3,8 @@
  * Mark Philip : msp3430
  * Advanced Computer Vision Project
  *
- * TODO: add accurate description
+ * Maps a webcam image of a projection back onto the original image that is being projected, allowing for a user with
+ * a laser pointer to interact with the laptop just by pointing the laser at the projector screen.
  *
  */
 
@@ -205,6 +206,14 @@ vector<Point> getDifferences(vector<Mat> frames) {
 }
 
 // TODO: Return corners in order: TL, TR, BR, BL
+/**
+ * The main calibration loop. The first cycle allows the user to position the laptop at the projected screen.
+ * The second cycle is the actual calibration cycle. It places a circle in each corner of the image, and flashes them
+ * alternatingly red and blue. It then extracts the locations of these circles from the webcam image, allowing the
+ * skew/transformation to be calculated.
+ *
+ * @return
+ */
 vector<Point> getCorners() {
     // create the calibration image and display it
     Mat testImage(Size(400, 400), CV_8UC3, Scalar(255, 255, 255));
