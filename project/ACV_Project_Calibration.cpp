@@ -342,13 +342,13 @@ int transformWebcamImage(const Mat transformationMatrix) {
     Point2f topRight(tempDisplay.cols - edgeMargin, edgeMargin);
     Point2f bottomRight(tempDisplay.cols - edgeMargin, tempDisplay.rows - edgeMargin);
     Point2f bottomLeft(edgeMargin, tempDisplay.rows - edgeMargin);
-    bool blue = false;
-
     vector<Point2f> points; //Clockwise: TL, TR, BR, BL
     points.push_back(topLeft);
     points.push_back(topRight);
     points.push_back(bottomRight);
     points.push_back(bottomLeft);
+    bool blue = false;
+    drawCircles(points, blue, tempDisplay);
 
     // start the webcam
     VideoCapture cap(0);
@@ -360,9 +360,8 @@ int transformWebcamImage(const Mat transformationMatrix) {
     Mat currFrame;
     while ((char)waitKey(40) != 'q') {
         cap >> currFrame;
-        blue = !blue;
-        drawCircles(points, blue, tempDisplay);
-        warpPerspective(currFrame, dewarpedWebcam, transformationMatrix, dewarpedWebcam.size());
+        warpPerspective(currFrame, dewarpedWebcam, transformationMatrix, Size(1024,768));
+        flip(dewarpedWebcam, dewarpedWebcam, 1);
         imshow(webcam_window, dewarpedWebcam);
         imshow(calibration_window, tempDisplay);
         waitKey(1);
