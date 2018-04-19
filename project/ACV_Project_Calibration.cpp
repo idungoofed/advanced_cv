@@ -12,17 +12,23 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv/cv.hpp>
+#include <opencv2/xfeatures2d.hpp>
 
+#include <map>
 #include <iostream>
+#include <fstream>
+
 
 // #include <opencv2/opencv.hpp>
 
 
 using namespace cv;
+using namespace cv::xfeatures2d;
 using namespace std;
 
 // drawing constants
 const int calibration_circle_radius = 20;
+const Size window_size = Size(1024,768);
 
 // filter params
 int pic_diff = 3;
@@ -34,6 +40,156 @@ const char *calibration_window = "Calibration Window";
 const char *webcam_window = "Webcam Image";
 const char *difference_window = "Calibration";
 const char *found_points_window = "Found Points";
+const char *rect_roi_image = "Rectified ROI";
+
+// Ben
+Mat firstFrame;
+Mat board;
+Point lastPointOnBoard;
+const char *window = "Image Display";
+
+//https://docs.opencv.org/3.1.0/d5/d6f/tutorial_feature_flann_matcher.html
+bool getLocationOfLaserPoint(Mat rectifiedPresentationView, Mat currentlyDisplayed, Point laserPointOut) {
+
+    //-- Step 1: Detect the keypoints using SURF Detector, compute the descriptors
+    int minHessian = 400;
+    Ptr<SURF> detector = SURF::create();
+    detector->setHessianThreshold(minHessian);
+
+    std::vector<KeyPoint> kpCamera, kpKnown;
+    Mat descriptorsCamera, descriptorsKnown;
+    detector->detectAndCompute(
+            rectifiedPresentationView, Mat(), kpCamera, descriptorsCamera
+    );
+    detector->detectAndCompute(
+            currentlyDisplayed, Mat(), kpKnown, descriptorsKnown
+    );
+
+    //-- Step 2: Matching descriptor vectors using FLANN matcher
+    FlannBasedMatcher matcher;
+    vector<DMatch> matches;
+    matcher.match(descriptorsCamera, descriptorsKnown, matches);
+
+    double maxDist = 0, minDist = 100;
+    // Quick calculation of max and min distances between keypoints
+    for( int i = 0; i < descriptorsCamera.rows; i++ )  {
+        double dist = matches[i].distance;
+        if( dist < minDist ) minDist = dist;
+        if( dist > maxDist ) maxDist = dist;
+    }
+
+    //-- Step 3: Get average distance, X and Y
+
+    double averageXDistSum = 0.0, averageYDistSum = 0.0;
+    int numberOfGoodMatches = 0;
+    double averageXDist = 0, averageYDist = 0;
+
+    vector<Point2f> queryPts;
+    vector<Point2f> matchedPts;
+
+    for( int i = 0; i < descriptorsCamera.rows; i++ ) {
+        if( matches[i].distance <= max(2.0*minDist, 0.02) ) {
+            //It's a good match! Adjust average x and y dist
+            /*Point2f pointCamera = kpCamera[matches[i].queryIdx].pt;
+            Point2f pointKnown = kpCamera[matches[i].trainIdx].pt;
+
+            averageXDistSum += pointKnown.x - pointCamera.x;
+            averageYDistSum += pointKnown.y - pointCamera.y;
+            numberOfGoodMatches ++;*/
+
+            queryPts.push_back( kpCamera[matches[i].queryIdx].pt );
+            matchedPts.push_back( kpKnown[matches[i].trainIdx].pt );
+        }
+    }
+
+    /*vector<Point2f> kpCameraCorners(4); //TL, TR, BR, BL
+    kpCameraCorners[0] = Point(0, 0);
+    kpCameraCorners[1] = Point(rectifiedPresentationView.cols, 0);
+    kpCameraCorners[2] = Point(rectifiedPresentationView.cols, rectifiedPresentationView.rows);
+    kpCameraCorners[3] = Point(0, rectifiedPresentationView.rows);
+
+    vector<Point2f> correlatedCorners(4);
+    perspectiveTransform( kpCameraCorners, correlatedCorners, homography );
+    */
+
+    Mat rectifiedROI;
+    cout << queryPts.size() << ", " << matchedPts.size() << endl;
+    if (queryPts.empty() || queryPts.size() < 4) {
+        return false;
+    }
+    Mat homography = findHomography( queryPts, matchedPts, RANSAC );
+    warpPerspective( rectifiedPresentationView, rectifiedROI, homography, window_size);//rectifiedPresentationView.size() );
+
+    imshow(rect_roi_image, rectifiedROI);
+
+    /*
+    averageXDist = averageXDistSum / numberOfGoodMatches;
+    averageYDist = averageYDistSum / numberOfGoodMatches;
+
+    cout << "Avg X dist: " << averageXDist << "\n";
+    cout << "Avg Y dist: " << averageYDist << "\n";
+
+    //-- Step 4: Adjust currently displayed mat by average distances
+    // (assuming rectifiedCameraView has the same orientation as what's
+    // currently displayed)
+
+    double sizeDiffX =
+            currentlyDisplayed.cols - rectifiedPresentationView.cols;
+    if (sizeDiffX < 0) {
+        sizeDiffX += averageXDist;
+    } else {
+        sizeDiffX = 0.0;
+    }
+
+    double sizeDiffY =
+            currentlyDisplayed.rows - rectifiedPresentationView.rows;
+    if (sizeDiffY < 0) {
+        sizeDiffY += averageYDist;
+    } else {
+        sizeDiffY = 0.0;
+    }
+
+    Rect rectifiedROIRect(
+            averageXDist, averageYDist,
+            rectifiedPresentationView.cols - sizeDiffX,
+            rectifiedPresentationView.rows - sizeDiffY
+    );
+
+    Mat rectifiedROI = rectifiedPresentationView.clone();
+    rectifiedROI = rectifiedROI(rectifiedROIRect);*/
+
+    //At this point, rectifiedROI should be the same size as currentlyDisplayed
+    Mat diff;
+    absdiff(rectifiedROI, currentlyDisplayed, diff);
+
+    Mat hsvDiff;
+    cvtColor(diff, hsvDiff, COLOR_BGR2HSV);
+
+    Mat hopefullyLaser;
+    inRange(hsvDiff, Scalar(0,180,180), Scalar(179, 255, 255), hopefullyLaser);
+
+    imshow(window, hopefullyLaser);
+}
+
+
+void placeDotOnBoard(Point pointRelativeToBoard, Scalar bgrColor, bool continuing) {
+
+    int lineWidth = 16;
+
+    if (pointRelativeToBoard.x >= 0 && pointRelativeToBoard.y >= 0 &&
+        pointRelativeToBoard.x < board.cols &&
+        pointRelativeToBoard.y < board.rows) {
+
+        if (continuing && lastPointOnBoard.x != -1 && lastPointOnBoard.y != -1) {
+            line(board, lastPointOnBoard, pointRelativeToBoard, bgrColor, lineWidth);
+        } else {
+            circle(board, pointRelativeToBoard, lineWidth / 2, bgrColor, -1);
+        }
+
+        lastPointOnBoard = pointRelativeToBoard;
+    }
+}
+
 
 /**
  * Pretty-prints the given int vector
@@ -231,7 +387,7 @@ vector<Point2f> getDifferences(vector<Mat> frames) {
  */
 Mat getTransformationMatrix() {
     // create the calibration image and display it
-    Mat testImage(Size(1024,768), CV_8UC3, Scalar(255, 255, 255));
+    Mat testImage(window_size, CV_8UC3, Scalar(255, 255, 255));
 
     int edgeMargin = 25;
 
@@ -263,7 +419,7 @@ Mat getTransformationMatrix() {
         return Mat(0,0,CV_8UC1);
     }
     namedWindow(webcam_window, CV_WINDOW_NORMAL);
-    setWindowProperty(webcam_window, CV_WND_PROP_FULLSCREEN, CV_WINDOW_FULLSCREEN);
+    //setWindowProperty(webcam_window, CV_WND_PROP_FULLSCREEN, CV_WINDOW_FULLSCREEN);
 
     // show calibration window and webcam image until user says everything is positioned
     cout << "Press q to start calibration..." << endl;
@@ -333,22 +489,25 @@ Mat getTransformationMatrix() {
 
 int transformWebcamImage(const Mat transformationMatrix) {
     // temporary display image
-    Mat tempDisplay(Size(1024,768), CV_8UC3, Scalar(255,255,255));
+    //Mat tempDisplay(window_size, CV_8UC3, Scalar(255,255,255));
     Mat dewarpedWebcam;
+
 
     // showing points for testing purposes
     int edgeMargin = 25;
     Point2f topLeft(edgeMargin, edgeMargin);
-    Point2f topRight(tempDisplay.cols - edgeMargin, edgeMargin);
-    Point2f bottomRight(tempDisplay.cols - edgeMargin, tempDisplay.rows - edgeMargin);
-    Point2f bottomLeft(edgeMargin, tempDisplay.rows - edgeMargin);
+
+    Point2f topRight(board.cols - edgeMargin, edgeMargin);
+    Point2f bottomRight(board.cols - edgeMargin, board.rows - edgeMargin);
+    Point2f bottomLeft(edgeMargin, board.rows - edgeMargin);
+
     vector<Point2f> points; //Clockwise: TL, TR, BR, BL
     points.push_back(topLeft);
     points.push_back(topRight);
     points.push_back(bottomRight);
     points.push_back(bottomLeft);
-    bool blue = false;
-    drawCircles(points, blue, tempDisplay);
+    bool blue = true;
+    drawCircles(points, blue, board);
 
     // start the webcam
     VideoCapture cap(0);
@@ -360,13 +519,19 @@ int transformWebcamImage(const Mat transformationMatrix) {
     Mat currFrame;
     while ((char)waitKey(40) != 'q') {
         cap >> currFrame;
-        warpPerspective(currFrame, dewarpedWebcam, transformationMatrix, Size(1024,768));
+        warpPerspective(currFrame, dewarpedWebcam, transformationMatrix, window_size);
         flip(dewarpedWebcam, dewarpedWebcam, 1);
         imshow(webcam_window, dewarpedWebcam);
-        imshow(calibration_window, tempDisplay);
-        waitKey(1);
+        imshow(calibration_window, board);
+        Point2f laserLoc;
+        getLocationOfLaserPoint(dewarpedWebcam, board, laserLoc);
+        waitKey(40);
     }
     return 0;
+}
+
+void initBoard(Size pixels) {
+    board = Mat(pixels, CV_8UC3, Scalar(255,255,255));
 }
 
 int main(int argc, char** argv) {
@@ -379,6 +544,15 @@ int main(int argc, char** argv) {
     //destroyWindow(webcam_window);
 
     // start processing for laser pointer
+    initBoard(window_size);
+    placeDotOnBoard(Point(300, 300), Scalar(0,0,255), false);
+    placeDotOnBoard(Point(400, 300), Scalar(0,0,255), false);
+    placeDotOnBoard(Point(200, 400), Scalar(0,0,255), false);
+    placeDotOnBoard(Point(350, 450), Scalar(0,0,255), true);
+    placeDotOnBoard(Point(500, 400), Scalar(0,0,255), true);
+    namedWindow(window, CV_WINDOW_NORMAL);
+    namedWindow(rect_roi_image, CV_WINDOW_NORMAL);
+
     int retval = transformWebcamImage(transformationMatrix);
     if (retval) {
         return EXIT_FAILURE;
