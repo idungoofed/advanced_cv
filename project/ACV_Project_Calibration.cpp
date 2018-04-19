@@ -34,6 +34,11 @@ const char *webcam_window = "Webcam Image";
 const char *difference_window = "Calibration";
 const char *found_points_window = "Found Points";
 
+/**
+ * Pretty-prints the given int vector
+ *
+ * @param vec    the vector to print
+ */
 void printVector(vector<int> vec) {
     cout << "[ ";
     for (auto& item : vec) {
@@ -49,15 +54,12 @@ void printVector(vector<int> vec) {
  * @return       Returns HSV scalar that represents the average color of @param bgr
  */
 Scalar BGRtoHSV(Mat bgr) {
-    //imshow("pt", bgr);
-    //waitKey(0);
-    //destroyWindow("pt");
     Scalar avg = mean(bgr);
+    // create a 1x1 mat to convert to hsv using cvtColor()
     Mat bgr_one(1,1, CV_8UC3, avg);
-    //cout << "AVG: " << avg << endl;
-    //cout << "BGR: " << bgr_one << endl;
     Mat hsv_one;
     cvtColor(bgr_one, hsv_one, CV_BGR2HSV);
+    // extract the scalar from the 1x1 mat
     Scalar hsv = hsv_one.at<Vec3b>(Point(0, 0));
     cout << "HSV: " << hsv << endl;
     return hsv;
@@ -99,36 +101,43 @@ void drawCircles(vector<Point2f> circles, bool blue, Mat image) {
  * @return           The centers of the four largest items in @param stats
  */
 vector<Point> getFourLargest(int nLabels, Mat stats, int imgSize) {
-    // used for keeping track of which blobs have already been removed. Filled with ints [0, nLabels)
+
+    // precalculate upper blob size bound
+    int blob_upper_bound = imgSize/8;
+
+    // used for keeping track of which blobs have already been removed. Filled with ints: [0, nLabels)
     vector<int> idxes(nLabels);
     iota(begin(idxes), end(idxes), 0);
-    // cout << "idxes at start: ";
-    // printVector(idxes);
+
     // used for keeping track of the centers of the four largest blobs
     vector<Point> foundPoints;
     foundPoints.reserve(4);
+
     // find 4 blobs
     for (int numFound = 0; numFound < 4; numFound++) {
         int max_idx = -1;
         int max_area = -1;
         int pop_idx = -1;
+        // find largest blob in indices specified in idxes
         for (int idx = 0; idx < idxes.size(); idx++) {
             int blob_area = stats.at<int>(idxes[idx], CC_STAT_AREA);
-            if (blob_area > max_area && blob_area < imgSize/8) {
+            if (blob_area > max_area && blob_area < blob_upper_bound) {
                 max_idx = idxes[idx];
                 max_area = blob_area;
                 pop_idx = idx;
             }
         }
+        // create a point at center of this round's biggest blob
         Point foundPoint = Point(
                 stats.at<int>(max_idx, CC_STAT_LEFT) + stats.at<int>(max_idx, CC_STAT_WIDTH)/2,
                 stats.at<int>(max_idx, CC_STAT_TOP) + stats.at<int>(max_idx, CC_STAT_HEIGHT)/2
         );
+        // store the new point
         foundPoints.push_back(foundPoint);
         cout << "Found idx " << max_idx << ": " << foundPoint << endl;
-        if (numFound != 3) {
-            idxes.erase(idxes.begin() + pop_idx);
-        }
+        //if (numFound != 3) {
+        idxes.erase(idxes.begin() + pop_idx);
+        //}
         // printVector(idxes);
     }
     return foundPoints;
@@ -162,24 +171,19 @@ vector<Point> getDifferences(vector<Mat> frames) {
     }
     imshow(difference_window, storedCircles);
 
-    /* FLOW
-     * ----
-     * Dilate (x2?)
-     * Find blobs (connected compononets w/ stats?) filter by a max size
-     *    - should be 4 of them, otherwise get 4 largest
-     *    - ensure that there is 1 per quadrant
-     *       - if not, rerun with a new frame cap count?
-     */
-
+    // Process the image to highlight the blobs we want.
+    // some noise removal?
     medianBlur(storedCircles, storedCircles, 5);
-    //erode(storedCircles, storedCircles, getStructuringElement(MORPH_ELLIPSE, Size(3, 3), Point(-1, -1)));
+    // blobify!
     for(int num_dilations = 0; num_dilations < curr_num_dilations; num_dilations++) {
         dilate(storedCircles, storedCircles, getStructuringElement(MORPH_ELLIPSE, Size(3, 3), Point(-1, -1)));
     }
 
+    // extract blobs
     Mat stats, centroids, labelImage;
     int nLabels = connectedComponentsWithStats(storedCircles, labelImage, stats, centroids, 8);
 
+    // if we didn't find at least 4 blobs, increase num dilations and try again with 6 new frames
     if (nLabels < 4) {
         curr_num_dilations++;
         return vector<Point>{};
@@ -200,7 +204,7 @@ vector<Point> getDifferences(vector<Mat> frames) {
     */
 }
 
-//Returns corners in order: TL, TR, BR, BL
+// TODO: Return corners in order: TL, TR, BR, BL
 vector<Point> getCorners() {
     // create the calibration image and display it
     Mat testImage(Size(400, 400), CV_8UC3, Scalar(255, 255, 255));
@@ -275,6 +279,7 @@ vector<Point> getCorners() {
             waitKey(100);
         }
         found_points = getDifferences(frames); // displays overall binary difference on differences_window
+        // display green rectangles around the found points
         Mat found_points_mat = currFrame.clone();
         for (Point point : found_points) {
             rectangle(found_points_mat, Point(point.x - 15, point.y - 15), Point(point.x + 15, point.y + 15), Scalar(0,255,0), 2);
