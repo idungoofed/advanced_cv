@@ -326,7 +326,9 @@ Mat getTransformationMatrix() {
         cout << point << endl;
     }
 
-    return getPerspectiveTransform(found_points, points);
+    //Mat transformationMatrix = findHomography(found_points, points);
+    Mat transformationMatrix = getPerspectiveTransform(found_points, points);
+    return transformationMatrix;
 }
 
 int transformWebcamImage(const Mat transformationMatrix) {
