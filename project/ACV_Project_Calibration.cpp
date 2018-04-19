@@ -367,6 +367,7 @@ int transformWebcamImage(const Mat transformationMatrix) {
         imshow(calibration_window, tempDisplay);
         waitKey(1);
     }
+    return 0;
 }
 
 int main(int argc, char** argv) {
@@ -380,7 +381,7 @@ int main(int argc, char** argv) {
 
     // start processing for laser pointer
     int retval = transformWebcamImage(transformationMatrix);
-    if (!retval) {
+    if (retval) {
         return EXIT_FAILURE;
     }
     else {
