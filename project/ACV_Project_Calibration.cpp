@@ -24,13 +24,23 @@ using namespace std;
 const int calibration_circle_radius = 20;
 
 // filter params
-int pic_diff = 2;
+int pic_diff = 3;
 int num_cap_frames = 6;
+int curr_num_dilations = 3;
 
 // window names
 const char *calibration_window = "Calibration Window";
 const char *webcam_window = "Webcam Image";
 const char *difference_window = "Calibration";
+const char *found_points_window = "Found Points";
+
+void printVector(vector<int> vec) {
+    cout << "[ ";
+    for (auto& item : vec) {
+        cout << item << " ";
+    }
+    cout << "]" << endl;
+}
 
 /**
  * Gets average rgb value of the given mat (extracted blob) and returns its hsv value
@@ -80,15 +90,60 @@ void drawCircles(vector<Point2f> circles, bool blue, Mat image) {
 }
 
 /**
+ * Gets the four largest (in area) items from stats.
+ * Only called if there are greater than 4 items in @param stats.
+ *
+ * @param nLabels    Number of items in @param stats
+ * @param stats      The details of items from connectedComponentsWithStats
+ *
+ * @return           The centers of the four largest items in @param stats
+ */
+vector<Point> getFourLargest(int nLabels, Mat stats, int imgSize) {
+    // used for keeping track of which blobs have already been removed. Filled with ints [0, nLabels)
+    vector<int> idxes(nLabels);
+    iota(begin(idxes), end(idxes), 0);
+    // cout << "idxes at start: ";
+    // printVector(idxes);
+    // used for keeping track of the centers of the four largest blobs
+    vector<Point> foundPoints;
+    foundPoints.reserve(4);
+    // find 4 blobs
+    for (int numFound = 0; numFound < 4; numFound++) {
+        int max_idx = -1;
+        int max_area = -1;
+        int pop_idx = -1;
+        for (int idx = 0; idx < idxes.size(); idx++) {
+            int blob_area = stats.at<int>(idxes[idx], CC_STAT_AREA);
+            if (blob_area > max_area && blob_area < imgSize/8) {
+                max_idx = idxes[idx];
+                max_area = blob_area;
+                pop_idx = idx;
+            }
+        }
+        Point foundPoint = Point(
+                stats.at<int>(max_idx, CC_STAT_LEFT) + stats.at<int>(max_idx, CC_STAT_WIDTH)/2,
+                stats.at<int>(max_idx, CC_STAT_TOP) + stats.at<int>(max_idx, CC_STAT_HEIGHT)/2
+        );
+        foundPoints.push_back(foundPoint);
+        cout << "Found idx " << max_idx << ": " << foundPoint << endl;
+        if (numFound != 3) {
+            idxes.erase(idxes.begin() + pop_idx);
+        }
+        // printVector(idxes);
+    }
+    return foundPoints;
+}
+
+
+/**
  * Given a vector of input frames, finds the areas where there is consistent change in the blue/red channels.
  *
  * @param frames     Vector of frames to process
- * @return           Returns a vector of keypoints in the order TL, TR, BR, BL
+ * @return           Returns a vector of points in the order TL, TR, BR, BL
  */
-vector<KeyPoint> getDifferences(vector<Mat> frames) {
+vector<Point> getDifferences(vector<Mat> frames) {
     // used to keep track of areas of interest
     Mat storedCircles(frames[0].rows, frames[0].cols, CV_8UC1, 255);
-    Mat diffMat(frames[0].rows, frames[0].cols, DataType<int>::type);
     // iterate over given frames
     for (size_t idx = 0; idx < frames.size() - 1; idx++) {
         Mat diff;
@@ -107,17 +162,6 @@ vector<KeyPoint> getDifferences(vector<Mat> frames) {
     }
     imshow(difference_window, storedCircles);
 
-    /*
-    // Used originally for finding a good pic_diff value
-    if (countNonZero(diff) > (diff.rows * diff.cols)/8) {
-        pic_diff++;
-        cout << "Difference threshold: " << pic_diff << endl;
-    }
-    else if (pic_diff > 1){
-        pic_diff--;
-    }
-     */
-
     /* FLOW
      * ----
      * Dilate (x2?)
@@ -126,11 +170,38 @@ vector<KeyPoint> getDifferences(vector<Mat> frames) {
      *    - ensure that there is 1 per quadrant
      *       - if not, rerun with a new frame cap count?
      */
-    return vector<KeyPoint>{};
+
+    medianBlur(storedCircles, storedCircles, 5);
+    //erode(storedCircles, storedCircles, getStructuringElement(MORPH_ELLIPSE, Size(3, 3), Point(-1, -1)));
+    for(int num_dilations = 0; num_dilations < curr_num_dilations; num_dilations++) {
+        dilate(storedCircles, storedCircles, getStructuringElement(MORPH_ELLIPSE, Size(3, 3), Point(-1, -1)));
+    }
+
+    Mat stats, centroids, labelImage;
+    int nLabels = connectedComponentsWithStats(storedCircles, labelImage, stats, centroids, 8);
+
+    if (nLabels < 4) {
+        curr_num_dilations++;
+        return vector<Point>{};
+    }
+    else {
+        cout << "Number of blobs: " << nLabels << endl;
+        vector<Point> points = getFourLargest(nLabels, stats, storedCircles.rows * storedCircles.cols);
+        return points;
+    }
+
+    /*
+    while (nLabels < 4) {
+        cout << "Dilating and rerunning connectedComponents" << endl;
+        dilate(storedCircles, storedCircles, getStructuringElement(MORPH_ELLIPSE, Size(3, 3), Point(-1, -1)));
+        nLabels = connectedComponentsWithStats(storedCircles, labelImage, stats, centroids, 8);
+        waitKey(500);
+    }
+    */
 }
 
 //Returns corners in order: TL, TR, BR, BL
-vector<KeyPoint> getCorners() {
+vector<Point> getCorners() {
     // create the calibration image and display it
     Mat testImage(Size(400, 400), CV_8UC3, Scalar(255, 255, 255));
 
@@ -163,7 +234,7 @@ vector<KeyPoint> getCorners() {
     VideoCapture cap(0);
     if (!cap.isOpened()) {
         cout << "Error opening webcam" << endl;
-        return vector<KeyPoint>{};
+        return vector<Point>{};
     }
     namedWindow(webcam_window, CV_WINDOW_NORMAL);
     setWindowProperty(webcam_window, CV_WND_PROP_FULLSCREEN, CV_WINDOW_FULLSCREEN);
@@ -181,12 +252,18 @@ vector<KeyPoint> getCorners() {
     }
 
     cout << "Starting calibration..." << endl;
+
     // setup display for difference display
     namedWindow(difference_window, CV_WINDOW_NORMAL);
-    vector<KeyPoint> num_points;
+
+    // setup window for displaying found points
+    namedWindow(found_points_window, CV_WINDOW_NORMAL);
+
+    // find the points
+    vector<Point> found_points;
     vector<Mat> frames;
     // grab num_cap_frames at a time and send to getDifferences for processing, alternating between red and blue
-    while (num_points.empty() || num_points.size() != 4) {
+    while (found_points.empty() || found_points.size() != 5) {
         for(int i = 0; i < num_cap_frames; i++) {
             blue = !blue;
             drawCircles(points, blue, testImage);
@@ -195,18 +272,27 @@ vector<KeyPoint> getCorners() {
             frames.push_back(currFrame.clone());
             imshow(calibration_window, testImage);
             imshow(webcam_window, currFrame);
-            waitKey(40);
+            waitKey(100);
         }
-        num_points = getDifferences(frames); // displays overall binary difference on differences_window
+        found_points = getDifferences(frames); // displays overall binary difference on differences_window
+        Mat found_points_mat = currFrame.clone();
+        for (Point point : found_points) {
+            rectangle(found_points_mat, Point(point.x - 15, point.y - 15), Point(point.x + 15, point.y + 15), Scalar(0,255,0), 2);
+        }
+        imshow(found_points_window, found_points_mat);
     }
     cout << "Calibration complete." << endl;
     cap.release();
-    return num_points;
+    return found_points;
 }
 
 
 int main(int argc, char** argv) {
-    getCorners();
+    vector<Point> points = getCorners();
+    //waitKey(0);
+    for (auto& point : points) {
+        cout << point << endl;
+    }
     return EXIT_SUCCESS;
 }
 
