@@ -34,6 +34,8 @@ const Size window_size = Size(1024,768);
 int pic_diff = 3;
 int num_cap_frames = 18;
 int curr_num_dilations = 3;
+int lower_laser_bound = 235;
+
 
 // window names
 const char *calibration_window = "Calibration Window";
@@ -49,21 +51,27 @@ Point lastPointOnBoard;
 const char *window = "Image Display";
 
 //https://docs.opencv.org/3.1.0/d5/d6f/tutorial_feature_flann_matcher.html
-bool getLocationOfLaserPoint(const Mat rectifiedPresentationView, const Mat currentlyDisplayed, Point laserPointOut) {
-
-    Mat rectifiedROI = rectifiedPresentationView.clone();
-
-    //At this point, rectifiedROI should be the same size as currentlyDisplayed
-    Mat diff;
-    absdiff(rectifiedROI, currentlyDisplayed, diff);
-
-    Mat hsvDiff;
-    cvtColor(diff, hsvDiff, COLOR_BGR2HSV);
+bool getLocationOfLaserPoint(Mat rectifiedPresentationView, Mat currentlyDisplayed, Point laserPointOut) {
 
     Mat hopefullyLaser;
-    inRange(hsvDiff, Scalar(40,180,180), Scalar(70, 255, 255), hopefullyLaser);
+    //absdiff(rectifiedPresentationView, currentlyDisplayed, diff);
+    //imshow(rect_roi_image, diff);
+    Scalar mean, stdev;
+    meanStdDev(rectifiedPresentationView, mean, stdev);
+    //inRange(rectifiedPresentationView, Scalar(mean[0]+3*stdev[0],mean[1]+3*stdev[1],mean[2]+3*stdev[2]), Scalar(255, 255, 255), hopefullyLaser);
+    inRange(rectifiedPresentationView,
+            Scalar(lower_laser_bound, lower_laser_bound, lower_laser_bound),
+            Scalar(255, 255, 255), hopefullyLaser
+    );
 
-    imshow(rect_roi_image, diff);
+    /*
+    Mat hopefullyLaser;
+    Mat rectifiedPresentationViewHSV;
+    cvtColor(rectifiedPresentationView, rectifiedPresentationViewHSV, CV_BGR2HSV);
+    inRange(rectifiedPresentationViewHSV, Scalar(0,180,180), Scalar(80, 255, 255), hopefullyLaser);
+
+    //imshow(rect_roi_image, diff);
+     */
     imshow(window, hopefullyLaser);
 }
 
@@ -230,7 +238,7 @@ vector<Point2f> getDifferences(vector<Mat> frames) {
         Mat comp = channels[0] + channels[2];
         // keep pixels above a certain diff threshold
         comp = comp > pic_diff;
-        //imshow(difference_window, comp);
+        imshow(difference_window, comp);
         // keep track of only the areas that consistently show red/blue change
         bitwise_and(storedCircles, comp, storedCircles);
     }
@@ -251,6 +259,7 @@ vector<Point2f> getDifferences(vector<Mat> frames) {
     // if we didn't find at least 4 blobs, increase num dilations and try again with 6 new frames
     if (nLabels < 4) {
         curr_num_dilations++;
+        cout << "Increasing dilations to " << curr_num_dilations << endl;
         return vector<Point2f>{};
     }
     else if (nLabels > 15) {
@@ -332,7 +341,7 @@ Mat getTransformationMatrix() {
     cout << "Starting calibration..." << endl;
 
     // setup display for difference display
-    namedWindow(difference_window, CV_WINDOW_NORMAL);
+    //namedWindow(difference_window, CV_WINDOW_NORMAL);
 
     // setup window for displaying found points
     namedWindow(found_points_window, CV_WINDOW_NORMAL);
@@ -447,7 +456,7 @@ int main(int argc, char** argv) {
     placeDotOnBoard(Point(350, 450), Scalar(0,0,255), true);
     placeDotOnBoard(Point(500, 400), Scalar(0,0,255), true);
     namedWindow(window, CV_WINDOW_NORMAL);
-    namedWindow(rect_roi_image, CV_WINDOW_NORMAL);
+    //namedWindow(rect_roi_image, CV_WINDOW_NORMAL);
 
     int retval = transformWebcamImage(transformationMatrix);
     if (retval) {
