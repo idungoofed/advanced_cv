@@ -81,6 +81,18 @@ Scalar HSVtoBGR(Scalar hsv) {
 }
 
 /**
+ * Helper function for sorting points in increasing y order.
+ * Used as part of return points in TL, TR, BL, BR order.
+ *
+ * @param p1    Point 1
+ * @param p2    Point 2
+ * @return      True if p1.y < p2.y, else false.
+ */
+bool pointSorter(Point2f p1, Point2f p2) {
+    return p1.y < p2.y;
+}
+
+/**
  * Draws red/blue circles at the specified points
  *
  * @param blue:    boolean that if true, the function draws blue circles. If false, draws red circles.
@@ -101,7 +113,7 @@ void drawCircles(vector<Point2f> circles, bool blue, Mat image) {
  *
  * @return           The centers of the four largest items in @param stats
  */
-vector<Point> getFourLargest(int nLabels, Mat stats, int imgSize) {
+vector<Point2f> getFourLargest(int nLabels, Mat stats, int imgSize) {
 
     // precalculate upper blob size bound
     int blob_upper_bound = imgSize/8;
@@ -111,7 +123,7 @@ vector<Point> getFourLargest(int nLabels, Mat stats, int imgSize) {
     iota(begin(idxes), end(idxes), 0);
 
     // used for keeping track of the centers of the four largest blobs
-    vector<Point> foundPoints;
+    vector<Point2f> foundPoints;
     foundPoints.reserve(4);
 
     // find 4 blobs
@@ -129,7 +141,7 @@ vector<Point> getFourLargest(int nLabels, Mat stats, int imgSize) {
             }
         }
         // create a point at center of this round's biggest blob
-        Point foundPoint = Point(
+        Point2f foundPoint = Point2f(
                 stats.at<int>(max_idx, CC_STAT_LEFT) + stats.at<int>(max_idx, CC_STAT_WIDTH)/2,
                 stats.at<int>(max_idx, CC_STAT_TOP) + stats.at<int>(max_idx, CC_STAT_HEIGHT)/2
         );
@@ -151,7 +163,7 @@ vector<Point> getFourLargest(int nLabels, Mat stats, int imgSize) {
  * @param frames     Vector of frames to process
  * @return           Returns a vector of points in the order TL, TR, BR, BL
  */
-vector<Point> getDifferences(vector<Mat> frames) {
+vector<Point2f> getDifferences(vector<Mat> frames) {
     // used to keep track of areas of interest
     Mat storedCircles(frames[0].rows, frames[0].cols, CV_8UC1, 255);
     // iterate over given frames
@@ -177,7 +189,7 @@ vector<Point> getDifferences(vector<Mat> frames) {
     medianBlur(storedCircles, storedCircles, 5);
     // blobify!
     for(int num_dilations = 0; num_dilations < curr_num_dilations; num_dilations++) {
-        dilate(storedCircles, storedCircles, getStructuringElement(MORPH_ELLIPSE, Size(3, 3), Point(-1, -1)));
+        dilate(storedCircles, storedCircles, getStructuringElement(MORPH_ELLIPSE, Size(3, 3), Point2f(-1, -1)));
     }
 
     // extract blobs
@@ -187,21 +199,21 @@ vector<Point> getDifferences(vector<Mat> frames) {
     // if we didn't find at least 4 blobs, increase num dilations and try again with 6 new frames
     if (nLabels < 4) {
         curr_num_dilations++;
-        return vector<Point>{};
+        return vector<Point2f>{};
     }
     else if (nLabels > 15) {
-        return vector<Point>{};
+        return vector<Point2f>{};
     }
     else {
         cout << "Number of blobs: " << nLabels << endl;
-        vector<Point> points = getFourLargest(nLabels, stats, storedCircles.rows * storedCircles.cols);
+        vector<Point2f> points = getFourLargest(nLabels, stats, storedCircles.rows * storedCircles.cols);
         return points;
     }
 
     /*
     while (nLabels < 4) {
         cout << "Dilating and rerunning connectedComponents" << endl;
-        dilate(storedCircles, storedCircles, getStructuringElement(MORPH_ELLIPSE, Size(3, 3), Point(-1, -1)));
+        dilate(storedCircles, storedCircles, getStructuringElement(MORPH_ELLIPSE, Size(3, 3), Point2f(-1, -1)));
         nLabels = connectedComponentsWithStats(storedCircles, labelImage, stats, centroids, 8);
         waitKey(500);
     }
@@ -217,19 +229,17 @@ vector<Point> getDifferences(vector<Mat> frames) {
  *
  * @return
  */
-vector<Point> getCorners() {
+Mat getTransformationMatrix() {
     // create the calibration image and display it
-    Mat testImage(Size(400, 400), CV_8UC3, Scalar(255, 255, 255));
+    Mat testImage(Size(1024,768), CV_8UC3, Scalar(255, 255, 255));
 
     int edgeMargin = 25;
 
-    Scalar crossColor = Scalar(0, 0, 255);
-
     //Create corners (centers of circles)
-    Point topLeft(edgeMargin, edgeMargin);
-    Point topRight(testImage.rows - edgeMargin, edgeMargin);
-    Point bottomRight(testImage.rows - edgeMargin, testImage.cols - edgeMargin);
-    Point bottomLeft(edgeMargin, testImage.cols - edgeMargin);
+    Point2f topLeft(edgeMargin, edgeMargin);
+    Point2f topRight(testImage.cols - edgeMargin, edgeMargin);
+    Point2f bottomRight(testImage.cols - edgeMargin, testImage.rows - edgeMargin);
+    Point2f bottomLeft(edgeMargin, testImage.rows - edgeMargin);
 
     vector<Point2f> points; //Clockwise: TL, TR, BR, BL
     points.push_back(topLeft);
@@ -250,7 +260,7 @@ vector<Point> getCorners() {
     VideoCapture cap(0);
     if (!cap.isOpened()) {
         cout << "Error opening webcam" << endl;
-        return vector<Point>{};
+        return Mat(0,0,CV_8UC1);
     }
     namedWindow(webcam_window, CV_WINDOW_NORMAL);
     setWindowProperty(webcam_window, CV_WND_PROP_FULLSCREEN, CV_WINDOW_FULLSCREEN);
@@ -276,7 +286,7 @@ vector<Point> getCorners() {
     namedWindow(found_points_window, CV_WINDOW_NORMAL);
 
     // find the points
-    vector<Point> found_points;
+    vector<Point2f> found_points;
     vector<Mat> frames;
     // grab num_cap_frames at a time and send to getDifferences for processing, alternating between red and blue
     while (found_points.empty() || found_points.size() != 4) {
@@ -293,24 +303,71 @@ vector<Point> getCorners() {
         found_points = getDifferences(frames); // displays overall binary difference on differences_window
         // display green rectangles around the found points
         Mat found_points_mat = currFrame.clone();
-        for (Point point : found_points) {
-            rectangle(found_points_mat, Point(point.x - 15, point.y - 15), Point(point.x + 15, point.y + 15), Scalar(0,255,0), 2);
+        for (Point2f point : found_points) {
+            rectangle(found_points_mat, Point2f(point.x - 15, point.y - 15), Point2f(point.x + 15, point.y + 15), Scalar(0,255,0), 2);
         }
         imshow(found_points_window, found_points_mat);
     }
     cout << "Calibration complete." << endl;
     cap.release();
-    return found_points;
-}
 
+    // sort in increasing y order
+    sort(found_points.begin(), found_points.end(), pointSorter);
+    // use x-values to check TL, TR, BR, BL order
+    if (found_points[0].x > found_points[1].x) {
+        swap(found_points[0], found_points[1]);
+    }
+    if (found_points[3].x > found_points[2].x) {
+        swap(found_points[2], found_points[3]);
+    }
 
-int main(int argc, char** argv) {
-    vector<Point> points = getCorners();
-    //waitKey(0);
-    for (auto& point : points) {
+    // print the points
+    for (auto& point : found_points) {
         cout << point << endl;
     }
-    return EXIT_SUCCESS;
+
+    return getPerspectiveTransform(found_points, points);
+}
+
+int transformWebcamImage(const Mat transformationMatrix) {
+    // temporary display image
+    Mat tempDisplay(Size(1024,768), CV_8UC3, Scalar(255,255,255));
+    Mat dewarpedWebcam;
+
+    // start the webcam
+    VideoCapture cap(0);
+    if (!cap.isOpened()) {
+        cout << "Error opening webcam" << endl;
+        return -1;
+    }
+
+    Mat currFrame;
+    while ((char)waitKey(40) != 'q') {
+        cap >> currFrame;
+        warpPerspective(currFrame, dewarpedWebcam, transformationMatrix, dewarpedWebcam.size());
+        imshow(webcam_window, dewarpedWebcam);
+        imshow(calibration_window, tempDisplay);
+        waitKey(1);
+    }
+}
+
+int main(int argc, char** argv) {
+    Mat transformationMatrix = getTransformationMatrix();
+    cout << transformationMatrix << endl;
+
+    // destroy unnecessary windows
+    destroyWindow(found_points_window);
+    destroyWindow(difference_window);
+    //destroyWindow(webcam_window);
+
+    // start processing for laser pointer
+    int retval = transformWebcamImage(transformationMatrix);
+    if (!retval) {
+        return EXIT_FAILURE;
+    }
+    else {
+        return EXIT_SUCCESS;
+    }
 }
 
 /*
