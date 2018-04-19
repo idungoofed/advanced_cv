@@ -49,114 +49,9 @@ Point lastPointOnBoard;
 const char *window = "Image Display";
 
 //https://docs.opencv.org/3.1.0/d5/d6f/tutorial_feature_flann_matcher.html
-bool getLocationOfLaserPoint(Mat rectifiedPresentationView, Mat currentlyDisplayed, Point laserPointOut) {
-
-    //-- Step 1: Detect the keypoints using SURF Detector, compute the descriptors
-    int minHessian = 400;
-    Ptr<SURF> detector = SURF::create();
-    detector->setHessianThreshold(minHessian);
-
-    std::vector<KeyPoint> kpCamera, kpKnown;
-    Mat descriptorsCamera, descriptorsKnown;
-    detector->detectAndCompute(
-            rectifiedPresentationView, Mat(), kpCamera, descriptorsCamera
-    );
-    detector->detectAndCompute(
-            currentlyDisplayed, Mat(), kpKnown, descriptorsKnown
-    );
-
-    //-- Step 2: Matching descriptor vectors using FLANN matcher
-    FlannBasedMatcher matcher;
-    vector<DMatch> matches;
-    matcher.match(descriptorsCamera, descriptorsKnown, matches);
-
-    double maxDist = 0, minDist = 100;
-    // Quick calculation of max and min distances between keypoints
-    for( int i = 0; i < descriptorsCamera.rows; i++ )  {
-        double dist = matches[i].distance;
-        if( dist < minDist ) minDist = dist;
-        if( dist > maxDist ) maxDist = dist;
-    }
-
-    //-- Step 3: Get average distance, X and Y
-
-    double averageXDistSum = 0.0, averageYDistSum = 0.0;
-    int numberOfGoodMatches = 0;
-    double averageXDist = 0, averageYDist = 0;
-
-    vector<Point2f> queryPts;
-    vector<Point2f> matchedPts;
-
-    for( int i = 0; i < descriptorsCamera.rows; i++ ) {
-        if( matches[i].distance <= max(2.0*minDist, 0.02) ) {
-            //It's a good match! Adjust average x and y dist
-            /*Point2f pointCamera = kpCamera[matches[i].queryIdx].pt;
-            Point2f pointKnown = kpCamera[matches[i].trainIdx].pt;
-
-            averageXDistSum += pointKnown.x - pointCamera.x;
-            averageYDistSum += pointKnown.y - pointCamera.y;
-            numberOfGoodMatches ++;*/
-
-            queryPts.push_back( kpCamera[matches[i].queryIdx].pt );
-            matchedPts.push_back( kpKnown[matches[i].trainIdx].pt );
-        }
-    }
-
-    /*vector<Point2f> kpCameraCorners(4); //TL, TR, BR, BL
-    kpCameraCorners[0] = Point(0, 0);
-    kpCameraCorners[1] = Point(rectifiedPresentationView.cols, 0);
-    kpCameraCorners[2] = Point(rectifiedPresentationView.cols, rectifiedPresentationView.rows);
-    kpCameraCorners[3] = Point(0, rectifiedPresentationView.rows);
-
-    vector<Point2f> correlatedCorners(4);
-    perspectiveTransform( kpCameraCorners, correlatedCorners, homography );
-    */
-
-    Mat rectifiedROI;
-    cout << queryPts.size() << ", " << matchedPts.size() << endl;
-    if (queryPts.empty() || queryPts.size() < 4) {
-        return false;
-    }
-    Mat homography = findHomography( queryPts, matchedPts, RANSAC );
-    warpPerspective( rectifiedPresentationView, rectifiedROI, homography, window_size);//rectifiedPresentationView.size() );
-
-    imshow(rect_roi_image, rectifiedROI);
-
-    /*
-    averageXDist = averageXDistSum / numberOfGoodMatches;
-    averageYDist = averageYDistSum / numberOfGoodMatches;
-
-    cout << "Avg X dist: " << averageXDist << "\n";
-    cout << "Avg Y dist: " << averageYDist << "\n";
-
-    //-- Step 4: Adjust currently displayed mat by average distances
-    // (assuming rectifiedCameraView has the same orientation as what's
-    // currently displayed)
-
-    double sizeDiffX =
-            currentlyDisplayed.cols - rectifiedPresentationView.cols;
-    if (sizeDiffX < 0) {
-        sizeDiffX += averageXDist;
-    } else {
-        sizeDiffX = 0.0;
-    }
-
-    double sizeDiffY =
-            currentlyDisplayed.rows - rectifiedPresentationView.rows;
-    if (sizeDiffY < 0) {
-        sizeDiffY += averageYDist;
-    } else {
-        sizeDiffY = 0.0;
-    }
-
-    Rect rectifiedROIRect(
-            averageXDist, averageYDist,
-            rectifiedPresentationView.cols - sizeDiffX,
-            rectifiedPresentationView.rows - sizeDiffY
-    );
+bool getLocationOfLaserPoint(const Mat rectifiedPresentationView, const Mat currentlyDisplayed, Point laserPointOut) {
 
     Mat rectifiedROI = rectifiedPresentationView.clone();
-    rectifiedROI = rectifiedROI(rectifiedROIRect);*/
 
     //At this point, rectifiedROI should be the same size as currentlyDisplayed
     Mat diff;
@@ -166,8 +61,9 @@ bool getLocationOfLaserPoint(Mat rectifiedPresentationView, Mat currentlyDisplay
     cvtColor(diff, hsvDiff, COLOR_BGR2HSV);
 
     Mat hopefullyLaser;
-    inRange(hsvDiff, Scalar(0,180,180), Scalar(179, 255, 255), hopefullyLaser);
+    inRange(hsvDiff, Scalar(40,180,180), Scalar(70, 255, 255), hopefullyLaser);
 
+    imshow(rect_roi_image, diff);
     imshow(window, hopefullyLaser);
 }
 
@@ -520,7 +416,7 @@ int transformWebcamImage(const Mat transformationMatrix) {
     while ((char)waitKey(40) != 'q') {
         cap >> currFrame;
         warpPerspective(currFrame, dewarpedWebcam, transformationMatrix, window_size);
-        flip(dewarpedWebcam, dewarpedWebcam, 1);
+        //flip(dewarpedWebcam, dewarpedWebcam, 1);
         imshow(webcam_window, dewarpedWebcam);
         imshow(calibration_window, board);
         Point2f laserLoc;
