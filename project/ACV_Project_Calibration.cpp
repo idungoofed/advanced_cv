@@ -26,7 +26,7 @@ const int calibration_circle_radius = 20;
 
 // filter params
 int pic_diff = 3;
-int num_cap_frames = 6;
+int num_cap_frames = 18;
 int curr_num_dilations = 3;
 
 // window names
@@ -189,6 +189,9 @@ vector<Point> getDifferences(vector<Mat> frames) {
         curr_num_dilations++;
         return vector<Point>{};
     }
+    else if (nLabels > 15) {
+        return vector<Point>{};
+    }
     else {
         cout << "Number of blobs: " << nLabels << endl;
         vector<Point> points = getFourLargest(nLabels, stats, storedCircles.rows * storedCircles.cols);
@@ -210,7 +213,7 @@ vector<Point> getDifferences(vector<Mat> frames) {
  * The main calibration loop. The first cycle allows the user to position the laptop at the projected screen.
  * The second cycle is the actual calibration cycle. It places a circle in each corner of the image, and flashes them
  * alternatingly red and blue. It then extracts the locations of these circles from the webcam image, allowing the
- * skew/transformation to be calculated.
+ * skew/warp to be calculated.
  *
  * @return
  */
@@ -276,7 +279,7 @@ vector<Point> getCorners() {
     vector<Point> found_points;
     vector<Mat> frames;
     // grab num_cap_frames at a time and send to getDifferences for processing, alternating between red and blue
-    while (found_points.empty() || found_points.size() != 4) {
+    while (found_points.empty() || found_points.size() != 5) {
         for(int i = 0; i < num_cap_frames; i++) {
             blue = !blue;
             drawCircles(points, blue, testImage);
