@@ -334,6 +334,20 @@ int transformWebcamImage(const Mat transformationMatrix) {
     Mat tempDisplay(Size(1024,768), CV_8UC3, Scalar(255,255,255));
     Mat dewarpedWebcam;
 
+    // showing points for testing purposes
+    int edgeMargin = 25;
+    Point2f topLeft(edgeMargin, edgeMargin);
+    Point2f topRight(tempDisplay.cols - edgeMargin, edgeMargin);
+    Point2f bottomRight(tempDisplay.cols - edgeMargin, tempDisplay.rows - edgeMargin);
+    Point2f bottomLeft(edgeMargin, tempDisplay.rows - edgeMargin);
+    bool blue = false;
+
+    vector<Point2f> points; //Clockwise: TL, TR, BR, BL
+    points.push_back(topLeft);
+    points.push_back(topRight);
+    points.push_back(bottomRight);
+    points.push_back(bottomLeft);
+
     // start the webcam
     VideoCapture cap(0);
     if (!cap.isOpened()) {
@@ -344,6 +358,8 @@ int transformWebcamImage(const Mat transformationMatrix) {
     Mat currFrame;
     while ((char)waitKey(40) != 'q') {
         cap >> currFrame;
+        blue = !blue;
+        drawCircles(points, blue, tempDisplay);
         warpPerspective(currFrame, dewarpedWebcam, transformationMatrix, dewarpedWebcam.size());
         imshow(webcam_window, dewarpedWebcam);
         imshow(calibration_window, tempDisplay);
