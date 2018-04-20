@@ -35,7 +35,7 @@ int pic_diff = 3;
 int num_cap_frames = 18;
 int curr_num_dilations = 3;
 int lower_laser_bound = 253;
-
+int min_blob_area = 1000;
 
 // window names
 const char *calibration_window = "Calibration Window";
@@ -52,6 +52,16 @@ const char *window = "Image Display";
 bool firstPoint = false;
 const int LASER_DILATE_KERNEL_WIDTH = 6;
 
+Mat kernel = getStructuringElement(
+    MORPH_ELLIPSE, Size( LASER_DILATE_KERNEL_WIDTH, LASER_DILATE_KERNEL_WIDTH ),
+    Point( LASER_DILATE_KERNEL_WIDTH / 2, LASER_DILATE_KERNEL_WIDTH / 2 )
+);
+
+Mat kernel2 = getStructuringElement(
+    MORPH_ELLIPSE, Size( LASER_DILATE_KERNEL_WIDTH*2, LASER_DILATE_KERNEL_WIDTH*2),
+    Point( LASER_DILATE_KERNEL_WIDTH, LASER_DILATE_KERNEL_WIDTH)
+);
+
 //https://docs.opencv.org/3.1.0/d5/d6f/tutorial_feature_flann_matcher.html
 Point2f getLocationOfLaserPoint(Mat rectifiedPresentationView, Mat currentlyDisplayed) {//}, Point laserPointOut) {
     Point2f laserPointOut;
@@ -67,13 +77,8 @@ Point2f getLocationOfLaserPoint(Mat rectifiedPresentationView, Mat currentlyDisp
             Scalar(255, 255, 255), hopefullyLaser
     );
 
-    Mat kernel = getStructuringElement(
-        MORPH_ELLIPSE, Size( LASER_DILATE_KERNEL_WIDTH, LASER_DILATE_KERNEL_WIDTH ),
-        Point( LASER_DILATE_KERNEL_WIDTH / 2, LASER_DILATE_KERNEL_WIDTH / 2 )
-    );
-
     dilate(hopefullyLaser, hopefullyLaser, kernel);
-    morphologyEx(hopefullyLaser, hopefullyLaser, MORPH_OPEN, kernel);
+    morphologyEx(hopefullyLaser, hopefullyLaser, MORPH_OPEN, kernel2);
 
     Mat ccLabels, ccStats, ccCentroids;
 
@@ -88,13 +93,13 @@ Point2f getLocationOfLaserPoint(Mat rectifiedPresentationView, Mat currentlyDisp
     // find largest blob
     for (int idx = 0; idx < numCCs; idx++) {
         int blob_area = ccStats.at<int>(idx, CC_STAT_AREA);
-        if (blob_area > 30 && blob_area > max_area && blob_area < (window_size.height * window_size.width) / 10) {
+        if (blob_area > min_blob_area && blob_area > max_area && blob_area < (window_size.height * window_size.width) / 10) {
             max_idx = idx;
             max_area = blob_area;
         }
     }
 
-    if (!numCCs || max_idx == -1) {
+    if (max_idx == -1) {
         return Point2f(-1, -1);
     } else {
         int ccHeight = ccStats.at<int>(max_idx, CC_STAT_HEIGHT);
@@ -105,9 +110,9 @@ Point2f getLocationOfLaserPoint(Mat rectifiedPresentationView, Mat currentlyDisp
         laserPointOut.x = x + ccWidth / 2;
         laserPointOut.y = y + ccHeight / 2;
         //cout << "Returning true" << endl;
+        //cout << "Max area: " << max_area << endl;
         return laserPointOut;
     }
-
 }
 
 
@@ -316,7 +321,6 @@ vector<Point2f> getDifferences(vector<Mat> frames) {
     */
 }
 
-// TODO: Return corners in order: TL, TR, BR, BL
 /**
  * The main calibration loop. The first cycle allows the user to position the laptop at the projected screen.
  * The second cycle is the actual calibration cycle. It places a circle in each corner of the image, and flashes them
@@ -457,7 +461,7 @@ int transformWebcamImage(const Mat transformationMatrix) {
     }
 
     Mat currFrame;
-    while ((char)waitKey(40) != 'q') {
+    while ((char)waitKey(1) != 'q') {
         cap >> currFrame;
         warpPerspective(currFrame, dewarpedWebcam, transformationMatrix, window_size);
         //flip(dewarpedWebcam, dewarpedWebcam, 1);
@@ -475,7 +479,6 @@ int transformWebcamImage(const Mat transformationMatrix) {
                 firstPoint = true;
             }
         }
-        waitKey(40);
     }
     return 0;
 }
