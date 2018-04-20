@@ -62,11 +62,11 @@ bool firstPoint = false;
 // Used for processing to find laser in image
 Mat kernel = getStructuringElement(
         MORPH_ELLIPSE, Size( LASER_DILATE_KERNEL_WIDTH, LASER_DILATE_KERNEL_WIDTH ),
-        Point( LASER_DILATE_KERNEL_WIDTH / 2, LASER_DILATE_KERNEL_WIDTH / 2 )
+        Point( -1,-1 )
 );
 Mat kernel2 = getStructuringElement(
         MORPH_ELLIPSE, Size( LASER_DILATE_KERNEL_WIDTH*2, LASER_DILATE_KERNEL_WIDTH*2),
-        Point( LASER_DILATE_KERNEL_WIDTH, LASER_DILATE_KERNEL_WIDTH)
+        Point( -1, -1)
 );
 
 /**
@@ -222,7 +222,7 @@ vector<Point2f> getFourLargest(int nLabels, Mat stats, int imgSize) {
         );
         // store the new point
         foundPoints.push_back(foundPoint);
-        cout << "Found idx " << max_idx << ": " << foundPoint << endl;
+        //cout << "Found idx " << max_idx << ": " << foundPoint << endl;
         // remove this blob from further rounds of comparison
         idxes.erase(idxes.begin() + pop_idx);
     }
@@ -309,12 +309,13 @@ Mat getTransformationMatrix() {
     points.push_back(topRight);
     points.push_back(bottomRight);
     points.push_back(bottomLeft);
-    cout << "Points:" << endl;
+    /*
+    cout << "Original point locations:" << endl;
     cout << "\tTL: " << topLeft << ", " << endl;
     cout << "\tTR: " << topRight << ", " << endl;
     cout << "\tBL: " << bottomLeft << ", " << endl;
     cout << "\tBR: " << bottomRight << ", " << endl;
-
+    */
     // this window needs to be put on the projection screen
     namedWindow(calibration_window, CV_WINDOW_NORMAL);
     imshow(calibration_window, testImage);
@@ -384,6 +385,7 @@ Mat getTransformationMatrix() {
     }
 
     // print the points
+    cout << "Found points:" << endl;
     for (auto& point : found_points) {
         cout << point << endl;
     }
@@ -428,6 +430,7 @@ int transformWebcamImage(Mat transformationMatrixX, Mat transformationMatrixY) {
     }
 
     // Check each frame for a laser
+    cout << "Starting whiteboard mode..." << endl;
     cout << "Press 'q' to quit." << endl;
     Mat currFrame;
     while ((char)waitKey(1) != 'q') {
