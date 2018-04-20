@@ -23,6 +23,7 @@
 #include <opencv2/xfeatures2d.hpp>
 #include <opencv/cv.hpp>
 
+#include <numeric>
 #include <iostream>
 
 using namespace cv;
@@ -72,19 +73,14 @@ Mat kernel2 = getStructuringElement(
  * Given the dewared webcam view, finds the location of a laser pointer in the image and stores it in @param
  * laserPointOut and returns true. If no laser is present, returns false.
  *
- * @param rectifiedPresentationView
- * @param laserPointOut
+ * @param rectifiedPresentationView This is the dewarped image coming from the webcam of the projection screen
+ * @param laserPointOut If a laser point is found, this is provided the X and Y location of the laser point
  *
- * @return                             True if a laser is present (with the location stored in @param laserPointOut).
- *                                     Else false.
+ * @return True if a laser is present (with the location stored in @param laserPointOut).
+ *         Else false.
  */
 bool getLocationOfLaserPoint(Mat rectifiedPresentationView, Point2i &laserPointOut) {
     Mat hopefullyLaser;
-    /*
-    Scalar mean, stdev;
-    meanStdDev(rectifiedPresentationView, mean, stdev);
-    inRange(rectifiedPresentationView, Scalar(mean[0]+3*stdev[0],mean[1]+3*stdev[1],mean[2]+3*stdev[2]), Scalar(255, 255, 255), hopefullyLaser);
-    */
     // Use thresholding to find the (super-bright) laser.
     inRange(rectifiedPresentationView,
             Scalar(lower_laser_bound, lower_laser_bound, lower_laser_bound),
@@ -137,9 +133,9 @@ bool getLocationOfLaserPoint(Mat rectifiedPresentationView, Point2i &laserPointO
  * Places a point on the board at the specified point (@param pointRelativeToBoard). Determines whether to draw a line
  * or just a point.
  *
- * @param pointRelativeToBoard
- * @param bgrColor
- * @param continuing
+ * @param pointRelativeToBoard The point on the board to draw at
+ * @param bgrColor The color to draw with (BGR)
+ * @param continuing Draw a line from the last point to this one? Otherwise, draw a single dot.
  */
 void placeDotOnBoard(Point pointRelativeToBoard, Scalar bgrColor, bool continuing) {
 
@@ -174,7 +170,7 @@ bool pointSorter(Point2f p1, Point2f p2) {
 /**
  * Draws red/blue circles at the specified points
  *
- * @param blue:    boolean that if true, the function draws blue circles. If false, draws red circles.
+ * @param blue    boolean that if true, the function draws blue circles. If false, draws red circles.
  */
 void drawCircles(vector<Point2f> circles, bool blue, Mat image) {
     for (const auto& circ : circles) {
@@ -402,8 +398,6 @@ Mat getTransformationMatrix() {
  * Captures frames from the computer's webcam, dewarps them using the precalculated transformation matrix, and then
  * detects if a laser is present in the image. If it is present, it draws the corresponding point on the projected image.
  *
- * Premapped matrices for performance inspired by http://romsteady.blogspot.in/2015/07/calculate-opencv-warpperspective-map.html
- *
  * @param transformationMatrixX
  * @param transformationMatrixY
  *
@@ -462,12 +456,15 @@ int transformWebcamImage(Mat transformationMatrixX, Mat transformationMatrixY) {
 }
 
 /**
- * <INSERT DESCRIPTION>
+ * Generates premapped matrices for performance inspired by 
+ * http://romsteady.blogspot.in/2015/07/calculate-opencv-warpperspective-map.html
  *
- * @param transformationMatrix
- * @param frameSize
- * @param outTransformationX
- * @param outTransformationY
+ * @param transformationMatrix The original transformation matrix, provided by getPerspectiveTransform
+ * @param frameSize The size to make the final matrix
+ * @param outTransformationX Transformation matrix which will be filled with the premapped points, 
+                             pertaining to the X transformations of the transformationMatrix
+ * @param outTransformationY Transformation matrix which will be filled with the premapped points, 
+                             pertaining to the Y transformations of the transformationMatrix
  */
 void createPremappedWarp(Mat transformationMatrix, Size frameSize,
                          Mat &outTransformationX, Mat &outTransformationY) {
