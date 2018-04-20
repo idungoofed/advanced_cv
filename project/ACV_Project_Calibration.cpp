@@ -15,8 +15,9 @@
 #include <opencv2/xfeatures2d.hpp>
 
 #include <map>
-#include <iostream>
 #include <fstream>
+#include <iostream>
+
 
 
 // #include <opencv2/opencv.hpp>
@@ -34,38 +35,39 @@ const Size window_size = Size(1024,768);
 int pic_diff = 3;
 int num_cap_frames = 18;
 int curr_num_dilations = 3;
-int lower_laser_bound = 253;
-int min_blob_area = 1000;
+int lower_laser_bound = 200;
+int min_blob_area = 500;
+
+// drawing constants
+const int line_size = 10;
 
 // window names
 const char *calibration_window = "Calibration Window";
 const char *webcam_window = "Webcam Image";
 const char *difference_window = "Calibration";
 const char *found_points_window = "Found Points";
-const char *rect_roi_image = "Rectified ROI";
 
 // Ben
 Mat firstFrame;
 Mat board;
-Point lastPointOnBoard;
+Point lastPointOnBoard(-1, -1);
 const char *window = "Image Display";
 bool firstPoint = false;
-const int LASER_DILATE_KERNEL_WIDTH = 6;
+const int LASER_DILATE_KERNEL_WIDTH = 6; //px
+const int LINE_DRAW_DISTANCE_CUTOFF = 20; //px
 
 Mat kernel = getStructuringElement(
-    MORPH_ELLIPSE, Size( LASER_DILATE_KERNEL_WIDTH, LASER_DILATE_KERNEL_WIDTH ),
-    Point( LASER_DILATE_KERNEL_WIDTH / 2, LASER_DILATE_KERNEL_WIDTH / 2 )
+        MORPH_ELLIPSE, Size( LASER_DILATE_KERNEL_WIDTH, LASER_DILATE_KERNEL_WIDTH ),
+        Point( LASER_DILATE_KERNEL_WIDTH / 2, LASER_DILATE_KERNEL_WIDTH / 2 )
 );
 
 Mat kernel2 = getStructuringElement(
-    MORPH_ELLIPSE, Size( LASER_DILATE_KERNEL_WIDTH*2, LASER_DILATE_KERNEL_WIDTH*2),
-    Point( LASER_DILATE_KERNEL_WIDTH, LASER_DILATE_KERNEL_WIDTH)
+        MORPH_ELLIPSE, Size( LASER_DILATE_KERNEL_WIDTH*2, LASER_DILATE_KERNEL_WIDTH*2),
+        Point( LASER_DILATE_KERNEL_WIDTH, LASER_DILATE_KERNEL_WIDTH)
 );
 
 //https://docs.opencv.org/3.1.0/d5/d6f/tutorial_feature_flann_matcher.html
-Point2f getLocationOfLaserPoint(Mat rectifiedPresentationView, Mat currentlyDisplayed) {//}, Point laserPointOut) {
-    Point2f laserPointOut;
-
+bool getLocationOfLaserPoint(Mat rectifiedPresentationView, Mat currentlyDisplayed, Point2i &laserPointOut) {
     Mat hopefullyLaser;
     //absdiff(rectifiedPresentationView, currentlyDisplayed, diff);
     //imshow(rect_roi_image, diff);
@@ -79,14 +81,18 @@ Point2f getLocationOfLaserPoint(Mat rectifiedPresentationView, Mat currentlyDisp
 
     dilate(hopefullyLaser, hopefullyLaser, kernel);
     morphologyEx(hopefullyLaser, hopefullyLaser, MORPH_OPEN, kernel2);
-
+    imshow(window, hopefullyLaser);
     Mat ccLabels, ccStats, ccCentroids;
 
     int numCCs = connectedComponentsWithStats(
-        hopefullyLaser, ccLabels, ccStats, ccCentroids, 8
+            hopefullyLaser, ccLabels, ccStats, ccCentroids, 8
     );
 
-    imshow(window, hopefullyLaser);
+    /*
+    if (numCCs > 20) {
+        return false;
+    }
+     */
 
     int max_idx = -1;
     int max_area = -1;
@@ -100,7 +106,7 @@ Point2f getLocationOfLaserPoint(Mat rectifiedPresentationView, Mat currentlyDisp
     }
 
     if (max_idx == -1) {
-        return Point2f(-1, -1);
+        return false;
     } else {
         int ccHeight = ccStats.at<int>(max_idx, CC_STAT_HEIGHT);
         int ccWidth = ccStats.at<int>(max_idx, CC_STAT_WIDTH);
@@ -109,16 +115,14 @@ Point2f getLocationOfLaserPoint(Mat rectifiedPresentationView, Mat currentlyDisp
 
         laserPointOut.x = x + ccWidth / 2;
         laserPointOut.y = y + ccHeight / 2;
-        //cout << "Returning true" << endl;
-        //cout << "Max area: " << max_area << endl;
-        return laserPointOut;
+        return true;
     }
 }
 
 
 void placeDotOnBoard(Point pointRelativeToBoard, Scalar bgrColor, bool continuing) {
 
-    int lineWidth = 16;
+    int lineWidth = line_size;
 
     if (pointRelativeToBoard.x >= 0 && pointRelativeToBoard.y >= 0 &&
         pointRelativeToBoard.x < board.cols &&
@@ -431,7 +435,9 @@ Mat getTransformationMatrix() {
     return transformationMatrix;
 }
 
-int transformWebcamImage(const Mat transformationMatrix) {
+//Runs using premapped matrices, to speed up
+//http://romsteady.blogspot.in/2015/07/calculate-opencv-warpperspective-map.html
+int transformWebcamImage(Mat transformationMatrixX, Mat transformationMatrixY) {
     // temporary display image
     //Mat tempDisplay(window_size, CV_8UC3, Scalar(255,255,255));
     Mat dewarpedWebcam;
@@ -463,24 +469,75 @@ int transformWebcamImage(const Mat transformationMatrix) {
     Mat currFrame;
     while ((char)waitKey(1) != 'q') {
         cap >> currFrame;
-        warpPerspective(currFrame, dewarpedWebcam, transformationMatrix, window_size);
+        //warpPerspective(currFrame, dewarpedWebcam, transformationMatrix, window_size);
         //flip(dewarpedWebcam, dewarpedWebcam, 1);
-        imshow(webcam_window, dewarpedWebcam);
-        imshow(calibration_window, board);
-        Point2f laserLoc = getLocationOfLaserPoint(dewarpedWebcam, board);
-        if (laserLoc.x != -1) {
-        //if (getLocationOfLaserPoint(dewarpedWebcam, board, laserLoc)) {
+        remap(currFrame, dewarpedWebcam, transformationMatrixX,
+              transformationMatrixY, INTER_LINEAR);
+        // imshow(webcam_window, dewarpedWebcam);
+        Point2i laserLoc;
+        if (getLocationOfLaserPoint(dewarpedWebcam, board, laserLoc)) {
             //cout << "Laserloc: " << laserLoc << endl;
             //Found single point
             //Draw it
 
-            placeDotOnBoard(laserLoc, Scalar(0, 0, 255), false);
+            bool drawLine = false;
+            if (firstPoint && norm(lastPointOnBoard-laserLoc) <= LINE_DRAW_DISTANCE_CUTOFF) {
+                drawLine = true;
+            }
+
+            placeDotOnBoard(laserLoc, Scalar(0, 0, 255), drawLine);
             if (!firstPoint) {
                 firstPoint = true;
             }
         }
+
+        imshow(calibration_window, board);
     }
     return 0;
+}
+
+void createPremappedWarp(Mat transformationMatrix, Size frameSize,
+                         Mat &outTransformationX, Mat &outTransformationY) {
+
+    // Since the camera won't be moving, let's pregenerate the remap LUT
+    cv::Mat inverseTransMatrix;
+    cv::invert(transformationMatrix, inverseTransMatrix);
+
+    // Generate the warp matrix
+    cv::Mat map_x, map_y, srcTM;
+    srcTM = inverseTransMatrix.clone(); // If WARP_INVERSE, set srcTM to transformationMatrix
+
+    map_x.create(frameSize, CV_32FC1);
+    map_y.create(frameSize, CV_32FC1);
+
+    double M11, M12, M13, M21, M22, M23, M31, M32, M33;
+    M11 = srcTM.at<double>(0,0);
+    M12 = srcTM.at<double>(0,1);
+    M13 = srcTM.at<double>(0,2);
+    M21 = srcTM.at<double>(1,0);
+    M22 = srcTM.at<double>(1,1);
+    M23 = srcTM.at<double>(1,2);
+    M31 = srcTM.at<double>(2,0);
+    M32 = srcTM.at<double>(2,1);
+    M33 = srcTM.at<double>(2,2);
+
+    for (int y = 0; y < frameSize.height; y++) {
+        double fy = (double)y;
+        for (int x = 0; x < frameSize.width; x++) {
+            double fx = (double)x;
+            double w = ((M31 * fx) + (M32 * fy) + M33);
+            w = w != 0.0f ? 1.f / w : 0.0f;
+            float new_x = (float)((M11 * fx) + (M12 * fy) + M13) * w;
+            float new_y = (float)((M21 * fx) + (M22 * fy) + M23) * w;
+            map_x.at<float>(y,x) = new_x;
+            map_y.at<float>(y,x) = new_y;
+        }
+    }
+
+    // This creates a fixed-point representation of the mapping resulting in ~4% CPU savings
+    outTransformationX.create(frameSize, CV_16SC2);
+    outTransformationY.create(frameSize, CV_16UC1);
+    cv::convertMaps(map_x, map_y, outTransformationX, outTransformationY, false);
 }
 
 void initBoard(Size pixels) {
@@ -494,7 +551,7 @@ int main(int argc, char** argv) {
     // destroy unnecessary windows
     destroyWindow(found_points_window);
     destroyWindow(difference_window);
-    //destroyWindow(webcam_window);
+    destroyWindow(webcam_window);
 
     // start processing for laser pointer
     initBoard(window_size);
@@ -504,9 +561,13 @@ int main(int argc, char** argv) {
     placeDotOnBoard(Point(350, 450), Scalar(0,0,255), true);
     placeDotOnBoard(Point(500, 400), Scalar(0,0,255), true);
     namedWindow(window, CV_WINDOW_NORMAL);
-    //namedWindow(rect_roi_image, CV_WINDOW_NORMAL);
 
-    int retval = transformWebcamImage(transformationMatrix);
+    Mat mappedTransformX, mappedTransformY;
+
+
+    createPremappedWarp(transformationMatrix, window_size,
+                        mappedTransformX, mappedTransformY);
+    int retval = transformWebcamImage(mappedTransformX, mappedTransformY);
     if (retval) {
         return EXIT_FAILURE;
     }
