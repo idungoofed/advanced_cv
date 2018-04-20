@@ -51,23 +51,23 @@ const char *difference_window = "Processing Frames for Corners";
 const char *found_points_window = "Found Corners";
 const char *window = "Processing for Laser";
 
-// Ben
+// Mat used for drawing on with laser
 Mat board;
+
+// Used for drawing on board
 Point lastPointOnBoard(-1, -1);
 bool firstPoint = false;
 
-
+// Used for processing to find laser in image
 Mat kernel = getStructuringElement(
         MORPH_ELLIPSE, Size( LASER_DILATE_KERNEL_WIDTH, LASER_DILATE_KERNEL_WIDTH ),
         Point( LASER_DILATE_KERNEL_WIDTH / 2, LASER_DILATE_KERNEL_WIDTH / 2 )
 );
-
 Mat kernel2 = getStructuringElement(
         MORPH_ELLIPSE, Size( LASER_DILATE_KERNEL_WIDTH*2, LASER_DILATE_KERNEL_WIDTH*2),
         Point( LASER_DILATE_KERNEL_WIDTH, LASER_DILATE_KERNEL_WIDTH)
 );
 
-//https://docs.opencv.org/3.1.0/d5/d6f/tutorial_feature_flann_matcher.html
 /**
  * Given the dewared webcam view, finds the location of a laser pointer in the image and stores it in @param
  * laserPointOut and returns true. If no laser is present, returns false.
