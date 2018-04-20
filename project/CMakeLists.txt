@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 
 set(PROJECT_NAME ACV_Project)
-set(SOURCE_FILES ACV_Project_Calibration.cpp)
+set(SOURCE_FILES ACV_Project.cpp)
 project(${PROJECT_NAME})
 find_package(OpenCV REQUIRED)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
