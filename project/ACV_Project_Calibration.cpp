@@ -34,7 +34,7 @@ const Size window_size = Size(1024,768);
 int pic_diff = 3;
 int num_cap_frames = 18;
 int curr_num_dilations = 3;
-int lower_laser_bound = 235;
+int lower_laser_bound = 253;
 
 
 // window names
@@ -49,9 +49,12 @@ Mat firstFrame;
 Mat board;
 Point lastPointOnBoard;
 const char *window = "Image Display";
+bool firstPoint = false;
+const int LASER_DILATE_KERNEL_WIDTH = 6;
 
 //https://docs.opencv.org/3.1.0/d5/d6f/tutorial_feature_flann_matcher.html
-bool getLocationOfLaserPoint(Mat rectifiedPresentationView, Mat currentlyDisplayed, Point laserPointOut) {
+Point2f getLocationOfLaserPoint(Mat rectifiedPresentationView, Mat currentlyDisplayed) {//}, Point laserPointOut) {
+    Point2f laserPointOut;
 
     Mat hopefullyLaser;
     //absdiff(rectifiedPresentationView, currentlyDisplayed, diff);
@@ -64,15 +67,47 @@ bool getLocationOfLaserPoint(Mat rectifiedPresentationView, Mat currentlyDisplay
             Scalar(255, 255, 255), hopefullyLaser
     );
 
-    /*
-    Mat hopefullyLaser;
-    Mat rectifiedPresentationViewHSV;
-    cvtColor(rectifiedPresentationView, rectifiedPresentationViewHSV, CV_BGR2HSV);
-    inRange(rectifiedPresentationViewHSV, Scalar(0,180,180), Scalar(80, 255, 255), hopefullyLaser);
+    Mat kernel = getStructuringElement(
+        MORPH_ELLIPSE, Size( LASER_DILATE_KERNEL_WIDTH, LASER_DILATE_KERNEL_WIDTH ),
+        Point( LASER_DILATE_KERNEL_WIDTH / 2, LASER_DILATE_KERNEL_WIDTH / 2 )
+    );
 
-    //imshow(rect_roi_image, diff);
-     */
+    dilate(hopefullyLaser, hopefullyLaser, kernel);
+    morphologyEx(hopefullyLaser, hopefullyLaser, MORPH_OPEN, kernel);
+
+    Mat ccLabels, ccStats, ccCentroids;
+
+    int numCCs = connectedComponentsWithStats(
+        hopefullyLaser, ccLabels, ccStats, ccCentroids, 8
+    );
+
     imshow(window, hopefullyLaser);
+
+    int max_idx = -1;
+    int max_area = -1;
+    // find largest blob
+    for (int idx = 0; idx < numCCs; idx++) {
+        int blob_area = ccStats.at<int>(idx, CC_STAT_AREA);
+        if (blob_area > 30 && blob_area > max_area && blob_area < (window_size.height * window_size.width) / 10) {
+            max_idx = idx;
+            max_area = blob_area;
+        }
+    }
+
+    if (!numCCs || max_idx == -1) {
+        return Point2f(-1, -1);
+    } else {
+        int ccHeight = ccStats.at<int>(max_idx, CC_STAT_HEIGHT);
+        int ccWidth = ccStats.at<int>(max_idx, CC_STAT_WIDTH);
+        int y = ccStats.at<int>(max_idx, CC_STAT_TOP);
+        int x = ccStats.at<int>(max_idx, CC_STAT_LEFT);
+
+        laserPointOut.x = x + ccWidth / 2;
+        laserPointOut.y = y + ccHeight / 2;
+        //cout << "Returning true" << endl;
+        return laserPointOut;
+    }
+
 }
 
 
@@ -428,8 +463,18 @@ int transformWebcamImage(const Mat transformationMatrix) {
         //flip(dewarpedWebcam, dewarpedWebcam, 1);
         imshow(webcam_window, dewarpedWebcam);
         imshow(calibration_window, board);
-        Point2f laserLoc;
-        getLocationOfLaserPoint(dewarpedWebcam, board, laserLoc);
+        Point2f laserLoc = getLocationOfLaserPoint(dewarpedWebcam, board);
+        if (laserLoc.x != -1) {
+        //if (getLocationOfLaserPoint(dewarpedWebcam, board, laserLoc)) {
+            //cout << "Laserloc: " << laserLoc << endl;
+            //Found single point
+            //Draw it
+
+            placeDotOnBoard(laserLoc, Scalar(0, 0, 255), false);
+            if (!firstPoint) {
+                firstPoint = true;
+            }
+        }
         waitKey(40);
     }
     return 0;
