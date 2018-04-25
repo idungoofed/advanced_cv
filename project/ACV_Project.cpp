@@ -438,7 +438,7 @@ int transformWebcamImage(Mat transformationMatrixX, Mat transformationMatrixY) {
 
         remap(currFrame, dewarpedWebcam, transformationMatrixX,
               transformationMatrixY, INTER_LINEAR);
-        // imshow(webcam_window, dewarpedWebcam);
+        //imshow(webcam_window, dewarpedWebcam);
         Point2i laserLoc;
         if (getLocationOfLaserPoint(dewarpedWebcam, laserLoc)) {
             // Found single point, so draw it to the image
@@ -543,11 +543,11 @@ int main(int argc, char** argv) {
 
     // Start processing for laser pointer. Pre-draw a smiley-face.
     initBoard(window_size);
-    placeDotOnBoard(Point(300, 300), Scalar(0,0,255), false);
-    placeDotOnBoard(Point(400, 300), Scalar(0,0,255), false);
-    placeDotOnBoard(Point(200, 400), Scalar(0,0,255), false);
-    placeDotOnBoard(Point(350, 450), Scalar(0,0,255), true);
-    placeDotOnBoard(Point(500, 400), Scalar(0,0,255), true);
+    //placeDotOnBoard(Point(300, 300), Scalar(0,0,255), false);
+    //placeDotOnBoard(Point(400, 300), Scalar(0,0,255), false);
+    //placeDotOnBoard(Point(200, 400), Scalar(0,0,255), false);
+    //placeDotOnBoard(Point(350, 450), Scalar(0,0,255), true);
+    //placeDotOnBoard(Point(500, 400), Scalar(0,0,255), true);
     namedWindow(window, CV_WINDOW_NORMAL);
 
     Mat mappedTransformX, mappedTransformY;
