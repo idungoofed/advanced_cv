@@ -59,7 +59,7 @@ int main(int argc, char *argv[]) {
         Mat dest = rotateImage(image);
         // display the image
         String window_title = "Rotated image";
-        namedWindow(window_title, WINDOW_AUTOSIZE);
+        namedWindow(window_title, CV_WINDOW_NORMAL);
         resizeWindow(window_title, 800, 800);
         imshow(window_title, dest);
         // wait for a keypress to exit
